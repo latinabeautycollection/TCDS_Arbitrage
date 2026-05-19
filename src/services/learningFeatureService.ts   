@@ -1,0 +1,139 @@
+import { withTx } from '../db/tx';
+import { ForensicEventRepository } from '../repositories/forensicEventRepository';
+import { LearningFeatureRepository } from '../repositories/learningFeatureRepository';
+import { MutationLedgerRepository } from '../repositories/mutationLedgerRepository';
+import { ProductJournalRepository } from '../repositories/productJournalRepository';
+import { PhaseSummaryRepository } from '../repositories/phaseSummaryRepository';
+
+export interface ComputeLearningFeatureInput {
+  processRunId: string;
+  processStepId: number;
+  entityType: string;
+  entityPk: string;
+  queueName: string;
+  jobId?: string | null;
+  workerName: string;
+  workerInstanceId?: string | null;
+  correlationId?: string | null;
+  causationId?: string | null;
+  idempotencyKey: string;
+  features: Array<{
+    featureGroup: string;
+    featureName: string;
+    featureValueJson: Record<string, unknown>;
+  }>;
+}
+
+export class LearningFeatureService {
+  async compute(input: ComputeLearningFeatureInput) {
+    return withTx(async (client) => {
+      const forensicRepo = new ForensicEventRepository(client);
+      const learningRepo = new LearningFeatureRepository(client);
+      const mutationRepo = new MutationLedgerRepository(client);
+      const journalRepo = new ProductJournalRepository(client);
+      const summaryRepo = new PhaseSummaryRepository(client);
+
+      const createdFeatures = await learningRepo.insertMany(
+        input.features.map((feature) => ({
+          processRunId: input.processRunId,
+          entityType: input.entityType,
+          entityPk: input.entityPk,
+          featureGroup: feature.featureGroup,
+          featureName: feature.featureName,
+          featureValueJson: feature.featureValueJson
+        }))
+      );
+
+      const event = await forensicRepo.append({
+        processRunId: input.processRunId,
+        processStepId: input.processStepId,
+        correlationId: input.correlationId ?? null,
+        causationId: input.causationId ?? null,
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        eventType: 'learning_features_computed',
+        actionType: 'INSERT',
+        actorType: 'worker',
+        actorId: input.workerName,
+        actorName: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null,
+        sourceTable: 'arb.learning_features',
+        sourcePk: createdFeatures.map((f) => String(f.id)).join(','),
+        queueName: input.queueName,
+        jobId: input.jobId ?? null,
+        idempotencyKey: input.idempotencyKey,
+        beforeJson: {},
+        afterJson: {
+          featureCount: createdFeatures.length,
+          features: createdFeatures.map((f) => ({
+            id: f.id,
+            featureGroup: f.feature_group ?? f.featureGroup,
+            featureName: f.feature_name ?? f.featureName
+          }))
+        },
+        evidenceJson: {
+          derivedFrom: 'canonical_forensic_chain'
+        },
+        metricsJson: {
+          featureCount: createdFeatures.length
+        },
+        flagsJson: []
+      });
+
+      await mutationRepo.append({
+        processRunId: input.processRunId,
+        correlationId: input.correlationId ?? null,
+        tableName: 'arb.learning_features',
+        rowPk: createdFeatures.map((f) => String(f.id)).join(','),
+        operationType: 'INSERT',
+        changedFields: ['feature_group', 'feature_name', 'feature_value_json'],
+        changeSummary: {
+          forensicEventId: event.id,
+          featureIds: createdFeatures.map((f) => f.id)
+        },
+        actorType: 'worker',
+        actorId: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null
+      });
+
+      await journalRepo.append({
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        eventType: 'LEARNING_FEATURES_COMPUTED',
+        processName: 'forensic.compute_learning',
+        processStage: 'COMPUTE_LEARNING',
+        processRunId: input.processRunId,
+        correlationId: input.correlationId ?? null,
+        actorType: 'worker',
+        actorId: input.workerName,
+        actorName: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null,
+        reasonCodes: ['LEARNING_COMPUTE_COMPLETE'],
+        riskFlags: [],
+        eventSummary: `Computed ${createdFeatures.length} learning features for ${input.entityType}:${input.entityPk}`,
+        eventDetailsJson: {
+          forensicEventId: event.id,
+          featureIds: createdFeatures.map((f) => f.id)
+        }
+      });
+
+      await summaryRepo.append({
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        processName: 'forensic.compute_learning',
+        processStage: 'COMPUTE_LEARNING',
+        processRunId: input.processRunId,
+        summaryLine: `Learning features computed: ${createdFeatures.length} for ${input.entityType}:${input.entityPk}`,
+        summaryOrder: 40
+      });
+
+      return {
+        event,
+        features: createdFeatures
+      };
+    });
+  }
+}

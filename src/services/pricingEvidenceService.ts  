@@ -1,0 +1,169 @@
+import { withTx } from '../db/tx';
+import { ForensicEventRepository } from '../repositories/forensicEventRepository';
+import { PricingEvidenceRepository } from '../repositories/pricingEvidenceRepository';
+import { MutationLedgerRepository } from '../repositories/mutationLedgerRepository';
+import { ProductJournalRepository } from '../repositories/productJournalRepository';
+import { PhaseSummaryRepository } from '../repositories/phaseSummaryRepository';
+
+export interface CapturePricingEvidenceInput {
+  processRunId: string;
+  processStepId: number;
+  entityType: string;
+  entityPk: string;
+  sourceListingNormalizedId?: number | null;
+  candidateId?: number | null;
+  decisionId?: string | null;
+  queueName: string;
+  jobId?: string | null;
+  workerName: string;
+  workerInstanceId?: string | null;
+  correlationId?: string | null;
+  causationId?: string | null;
+  idempotencyKey: string;
+  priceType: string;
+  amountUsd?: number | null;
+  ebayFeeUsd?: number | null;
+  paymentFeeUsd?: number | null;
+  shippingUsd?: number | null;
+  totalCostBasisUsd?: number | null;
+  expectedProfitUsd?: number | null;
+  roiPct?: number | null;
+  marginPct?: number | null;
+  payloadJson?: Record<string, unknown>;
+}
+
+export class PricingEvidenceService {
+  async capture(input: CapturePricingEvidenceInput) {
+    return withTx(async (client) => {
+      const forensicRepo = new ForensicEventRepository(client);
+      const evidenceRepo = new PricingEvidenceRepository(client);
+      const mutationRepo = new MutationLedgerRepository(client);
+      const journalRepo = new ProductJournalRepository(client);
+      const summaryRepo = new PhaseSummaryRepository(client);
+
+      const payloadJson = input.payloadJson ?? {};
+
+      const event = await forensicRepo.append({
+        processRunId: input.processRunId,
+        processStepId: input.processStepId,
+        correlationId: input.correlationId ?? null,
+        causationId: input.causationId ?? null,
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        eventType: 'pricing_evidence_captured',
+        actionType: 'INSERT',
+        actorType: 'worker',
+        actorId: input.workerName,
+        actorName: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null,
+        sourceTable: 'arb.pricing_evidence',
+        sourcePk: null,
+        queueName: input.queueName,
+        jobId: input.jobId ?? null,
+        idempotencyKey: input.idempotencyKey,
+        beforeJson: {},
+        afterJson: {
+          priceType: input.priceType,
+          amountUsd: input.amountUsd ?? null,
+          ebayFeeUsd: input.ebayFeeUsd ?? null,
+          paymentFeeUsd: input.paymentFeeUsd ?? null,
+          shippingUsd: input.shippingUsd ?? null,
+          totalCostBasisUsd: input.totalCostBasisUsd ?? null,
+          expectedProfitUsd: input.expectedProfitUsd ?? null,
+          roiPct: input.roiPct ?? null,
+          marginPct: input.marginPct ?? null
+        },
+        evidenceJson: payloadJson,
+        metricsJson: {},
+        flagsJson: []
+      });
+
+      const evidence = await evidenceRepo.insert({
+        processRunId: input.processRunId,
+        processStepId: input.processStepId,
+        forensicEventId: event.id,
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        sourceListingNormalizedId: input.sourceListingNormalizedId ?? null,
+        candidateId: input.candidateId ?? null,
+        decisionId: input.decisionId ?? null,
+        priceType: input.priceType,
+        amountUsd: input.amountUsd ?? null,
+        ebayFeeUsd: input.ebayFeeUsd ?? null,
+        paymentFeeUsd: input.paymentFeeUsd ?? null,
+        shippingUsd: input.shippingUsd ?? null,
+        totalCostBasisUsd: input.totalCostBasisUsd ?? null,
+        expectedProfitUsd: input.expectedProfitUsd ?? null,
+        roiPct: input.roiPct ?? null,
+        marginPct: input.marginPct ?? null,
+        payloadJson
+      });
+
+      await mutationRepo.append({
+        processRunId: input.processRunId,
+        correlationId: input.correlationId ?? null,
+        tableName: 'arb.pricing_evidence',
+        rowPk: String(evidence.id),
+        operationType: 'INSERT',
+        changedFields: [
+          'price_type',
+          'amount_usd',
+          'ebay_fee_usd',
+          'payment_fee_usd',
+          'shipping_usd',
+          'expected_profit_usd',
+          'roi_pct'
+        ],
+        changeSummary: {
+          forensicEventId: event.id,
+          pricingEvidenceId: evidence.id
+        },
+        actorType: 'worker',
+        actorId: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null
+      });
+
+      await journalRepo.append({
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        candidateId: input.candidateId ?? null,
+        sourceListingNormalizedId: input.sourceListingNormalizedId ?? null,
+        eventType: 'PRICING_EVIDENCE_CAPTURED',
+        processName: 'forensic.capture_pricing',
+        processStage: 'CAPTURE_PRICING',
+        processRunId: input.processRunId,
+        correlationId: input.correlationId ?? null,
+        actorType: 'worker',
+        actorId: input.workerName,
+        actorName: input.workerName,
+        workerName: input.workerName,
+        workerInstanceId: input.workerInstanceId ?? null,
+        reasonCodes: ['FORENSIC_CAPTURE'],
+        riskFlags: [],
+        eventSummary: `Pricing evidence captured for ${input.entityType}:${input.entityPk}`,
+        eventDetailsJson: {
+          forensicEventId: event.id,
+          pricingEvidenceId: evidence.id
+        }
+      });
+
+      await summaryRepo.append({
+        entityType: input.entityType,
+        entityPk: input.entityPk,
+        candidateId: input.candidateId ?? null,
+        processName: 'forensic.capture_pricing',
+        processStage: 'CAPTURE_PRICING',
+        processRunId: input.processRunId,
+        summaryLine: `Pricing evidence captured: profit ${input.expectedProfitUsd ?? 'n/a'} ROI ${input.roiPct ?? 'n/a'}`,
+        summaryOrder: 30
+      });
+
+      return {
+        event,
+        evidence
+      };
+    });
+  }
+}

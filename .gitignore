@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# PM2 runtime
+pm2/
+.pm2/
+
+# Backups
+*.bak
+*.bak.*
+*.bak-*
+
+# OS / editor
+.DS_Store
+*.swp
+
+# Test coverage
+coverage/
+
+# Accidental npm-typo zero-byte files (clean up later)
+/activeCompCount
+/decision
+/epid
+/error-
+/message
+/npm
+/product-
+/title
+/rimraf
+/arb-system-api@1.0.0
+
+# Runtime configs with secrets — keep local, never commit
+ecosystem.comp.config.js
