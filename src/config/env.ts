@@ -1,8 +1,13 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import path from 'node:path';
+const APP_ENV = process.env.APP_ENV || process.env.NODE_ENV || 'development';
+loadEnv({ path: path.resolve(process.cwd(), '.env.' + APP_ENV) });
+loadEnv();
 import { z } from 'zod';
 
 const EnvSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('development'),
+  APP_ENV: z.enum(['development', 'test', 'preproduction', 'production']).default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'staging', 'preproduction', 'production']).default('development'),
 
   APP_NAME: z.string().default('arb-system'),
   APP_VERSION: z.string().default('1.0.0'),
