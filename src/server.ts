@@ -3,6 +3,8 @@ import { Pool } from 'pg';
 import { env } from './config/env';
 import healthRoutes from './routes/health';
 import ebayAuthRoutes from './routes/ebayAuth';
+import upsAuthRoutes from './routes/upsAuth';
+import shipengineWebhookRoutes from './routes/shipengineWebhooks';
 import ebayProbeRoutes from './routes/ebayProbe';
 import { createProng2HealthRouter } from './routes/prong2HealthRoutes';
 import { createLogger, serializeError } from './services/logger';
@@ -144,6 +146,8 @@ function mountApiRoutes(input: {
   app.use(createMetricsRouter({ metricsService, logger }));
   app.use(healthRoutes);
   app.use(ebayAuthRoutes);
+  app.use(upsAuthRoutes);
+  app.use(shipengineWebhookRoutes);
   app.use(ebayProbeRoutes);
 
   // --------------------------------------------------------------------------
