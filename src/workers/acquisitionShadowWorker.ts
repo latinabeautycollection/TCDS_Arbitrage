@@ -42,7 +42,10 @@ async function claim(): Promise<number[]> {
   const res = await pool.query(
     `with claimable as (
        select oq.id from arb.opportunity_queue oq
+       join arb.candidates c on c.id=oq.candidate_id
+       join arb.listings l on l.id=c.listing_id
        where oq.status = $1
+         and l.end_time > now()
          and not exists (select 1 from arb.acquisition_shadow_decisions sd where sd.opportunity_queue_id=oq.id and sd.created_at > now() - ($2||' hours')::interval)
          and not exists (select 1 from arb.acquisition_shadow_claims sc where sc.opportunity_queue_id=oq.id and sc.claim_expires_at > now())
        order by oq.priority_score desc nulls last, oq.id
@@ -104,6 +107,8 @@ async function scoreOne(r: any): Promise<void> {
   if (endMs === null || Number.isNaN(endMs) || endMs <= Date.now()) { d1 = 'REJECT'; reasonCodes.push('LISTING_ENDED'); }
   else if (endMs <= Date.now() + cfg.liveBufferSec * 1000 && d1 === 'BUY') { d1 = 'REVIEW'; reasonCodes.push('LISTING_ENDING_SOON'); }
 
+  let d1Rank: string = rules.rank;
+  if (d1 === 'REJECT') d1Rank = 'REJECT'; else if (d1 === 'REVIEW') d1Rank = 'REVIEW';
   const legacy = r.legacy_decision ? String(r.legacy_decision) : null;
   const agreement = classify(legacy, d1);
   const profitDelta = numN(financial.estimatedProfitUsd) !== null && numN(r.legacy_profit) !== null ? round(numN(financial.estimatedProfitUsd)! - numN(r.legacy_profit)!, 2) : null;
@@ -114,15 +119,15 @@ async function scoreOne(r: any): Promise<void> {
     `insert into arb.acquisition_shadow_decisions
        (opportunity_queue_id, listing_id, candidate_id, policy_version, legacy_decision, legacy_reason_codes, legacy_risk_flags, legacy_max_bid,
         domain1_decision, domain1_reason_codes, domain1_risk_flags, domain1_confidence, domain1_max_bid, profit_delta, roi_delta,
-        agreement_status, capital_safety_status, shipping_signal_status, domain1_input_hash, comparison_json)
-     values ($1,$2::uuid,$3,$4,$5,$6::text[],$7::text[],$8,$9,$10::text[],$11::text[],$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb)`,
+        agreement_status, capital_safety_status, shipping_signal_status, domain1_input_hash, comparison_json, domain1_rank)
+     values ($1,$2::uuid,$3,$4,$5,$6::text[],$7::text[],$8,$9,$10::text[],$11::text[],$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`,
     [r.oqid, r.listing_id, r.candidate_id, policy.policyVersion, legacy, toArr(r.legacy_reason_codes), toArr(r.legacy_risk_flags), numN(r.legacy_max_bid),
      d1, dedupe(reasonCodes), dedupe(rules.riskFlags), rules.confidenceScore, numN(financial.maxBidUsd), profitDelta, roiDelta,
      agreement, capStatus, shippingSignal.source, identity.fingerprint,
      JSON.stringify({ identity: { categoryKey: identity.categoryKey, confidence: identity.identityConfidence, familyKey: identity.familyKey },
        market: { soldCount: market.soldCount, soldMedian: market.soldMedian, liquidity: market.liquidityScore },
        financial: { purchase: financial.estimatedPurchasePriceUsd, resale: financial.conservativeResaleUsd, profit: financial.estimatedProfitUsd, roi: financial.estimatedRoi, maxBid: financial.maxBidUsd },
-       rules: { status: rules.status, rank: rules.rank, confidence: rules.confidenceScore }, gates: { liveness: reasonCodes.filter((x) => x.startsWith('LISTING_')), capital: capStatus, shipping: shippingSignal.source } })]);
+       rules: { status: rules.status, rank: rules.rank, confidence: rules.confidenceScore }, gates: { liveness: reasonCodes.filter((x) => x.startsWith('LISTING_')), capital: capStatus, shipping: shippingSignal.source } }), d1Rank]);
   await pool.query(`update arb.acquisition_shadow_claims set last_status='scored', updated_at=now() where opportunity_queue_id=$1`, [r.oqid]);
   log('scored', { oqid: r.oqid, legacy, domain1: d1, agreement });
 }
