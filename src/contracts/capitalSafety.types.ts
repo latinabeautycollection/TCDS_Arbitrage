@@ -41,6 +41,7 @@ export interface SafetyDecisionInput {
   isBundle?: boolean | null;
   candidateTitle?: string | null;
   totalCostBasisUsd?: number | null;
+  endTime?: string | null;
 }
 
 export interface CapitalSafetyGateResult {

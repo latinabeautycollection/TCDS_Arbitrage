@@ -10,6 +10,9 @@ export function evaluateCapitalSafetyGate(
   const decision = normalizeDecision(input.decision);
 
     if (decision === 'BUY') {
+    const endMs = input.endTime ? new Date(input.endTime).getTime() : null;
+    const minLeadMs = (Number(process.env.CAPITAL_GATE_MIN_SECONDS_TO_END) || 3600) * 1000;
+    if (endMs === null || Number.isNaN(endMs) || endMs <= Date.now() + minLeadMs) reasons.add('CAPITAL_GATE_LISTING_NOT_LIVE');
     if ((input.expectedProfitUsd ?? Number.NEGATIVE_INFINITY) <= 0) reasons.add('CAPITAL_GATE_PROFIT_NOT_POSITIVE');
     if ((input.soldCount ?? 0) < policy.minCompCount) reasons.add('CAPITAL_GATE_LOW_COMP_COUNT');
     if ((input.identityConfidence ?? 0) < policy.minIdentityConfidence) reasons.add('CAPITAL_GATE_LOW_IDENTITY_CONFIDENCE');

@@ -111,6 +111,7 @@ export async function runPhase2HardeningWorker(
             isBundle: item.isBundle,
             candidateTitle: item.candidateTitle,
             totalCostBasisUsd: item.totalCostBasisUsd,
+            endTime: item.endTime,
           };
           const result = evaluateCapitalSafetyGate(decisionInput, policy);
           await repository.persistSafetyAssessment({

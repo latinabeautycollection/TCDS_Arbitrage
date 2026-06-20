@@ -27,6 +27,7 @@ export interface ClaimedOpportunityForSafety {
   isBundle: boolean;
   candidateTitle: string | null;
   totalCostBasisUsd: number | null;
+  endTime: string | null;
 }
 
 export class CapitalSafetyRepository {
@@ -103,13 +104,15 @@ order by coalesce(oq.priority_score, 0) desc nulls last, oq.created_at asc
               m.sold_30d,
               m.active_count,
               m.liquidity_ratio,
-              g.grounding_score
+              g.grounding_score,
+              l.end_time
        from arb.opportunity_queue oq
        join arb.candidates c on c.id = oq.candidate_id
        left join arb.decisions d on d.listing_id = c.listing_id
        left join arb.profit_analysis pa on pa.candidate_id = c.id
        left join arb.candidate_dedupe_gate dg on dg.candidate_id = c.id
        left join arb.ebay_market m on m.listing_id = c.listing_id
+       left join arb.listings l on l.id = c.listing_id
        left join lateral (
          select grounding_score
          from arb.prong2_comp_grounding_assessment x
@@ -143,6 +146,7 @@ order by coalesce(oq.priority_score, 0) desc nulls last, oq.created_at asc
       isBundle: Boolean(row.is_bundle),
       candidateTitle: nullableStr(row.candidate_title),
       totalCostBasisUsd: nullableNum(row.expected_total_cost_basis_usd),
+      endTime: nullableStr(row.end_time),
     }));
   }
 
@@ -198,6 +202,8 @@ order by coalesce(oq.priority_score, 0) desc nulls last, oq.created_at asc
                  then coalesce(risk_flags_json,'[]'::jsonb) || $4::jsonb
                else jsonb_build_array(coalesce(risk_flags_json,'[]'::jsonb)) || $4::jsonb
              end,
+           capital_safe = $5::boolean,
+           capital_block_reason_json = $6::jsonb,
            updated_at = now()
          where listing_id=$1::uuid`,
         [
@@ -205,6 +211,8 @@ order by coalesce(oq.priority_score, 0) desc nulls last, oq.created_at asc
           input.result.gateReasonCodes,
           JSON.stringify(input.result.gateReasonCodes),
           JSON.stringify(input.result.riskFlags),
+          input.result.allowedDecision === 'BUY',
+          JSON.stringify({ status: input.result.capitalGateStatus, allowedDecision: input.result.allowedDecision, reasons: input.result.gateReasonCodes }),
         ],
       );
       if (input.decisionInput.opportunityQueueId) {
