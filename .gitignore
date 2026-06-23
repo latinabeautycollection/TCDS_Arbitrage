@@ -44,3 +44,8 @@ coverage/
 
 # Runtime configs with secrets — keep local, never commit
 ecosystem.comp.config.js
+
+# local backups/scratch
+*.bak
+*.bak.*
+*.bak-*

@@ -10,7 +10,7 @@ const pool = new Pool({
 async function refreshEbayToken() {
   const clientId = process.env.EBAY_PROD_CLIENT_ID!;
   const clientSecret = process.env.EBAY_PROD_CLIENT_SECRET!;
-  const scope = encodeURIComponent(process.env.EBAY_PROD_SCOPES ?? 'https://api.ebay.com/oauth/api_scope');
+  const scope = encodeURIComponent(process.env.EBAY_DEFAULT_SCOPES ?? 'https://api.ebay.com/oauth/api_scope');
 
   const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
