@@ -25,6 +25,12 @@ export interface AcquisitionCandidate {
 }
 
 export interface AcquisitionCategoryPolicy {
+  buyersPremiumRate: number;
+  ebayFixedOrderFeeUsd: number;
+  sellingShippingFallbackUsd: number;
+  targetMarginRate: number;
+  relaxedMarginRate: number;
+  relaxedMinProfitUsd: number;
   policyVersion: string;
   scoringVersion: string;
   categoryKey: string;

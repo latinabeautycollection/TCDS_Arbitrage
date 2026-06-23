@@ -8,6 +8,7 @@ const APPLIANCE_WORDS = /\b(blender|vacuum|mixer|air fryer|coffee maker|keurig|d
 
 export function resolveAcquisitionIdentity(candidate: AcquisitionCandidate): NormalizedIdentity {
   const raw = normalizeWhitespace([candidate.brand, candidate.model, candidate.normalizedTitle, candidate.title, candidate.description].filter(Boolean).join(' '));
+  const matchRaw = normalizeWhitespace([candidate.brand, candidate.model, candidate.normalizedTitle, candidate.title].filter(Boolean).join(' '));
   const lower = raw.toLowerCase();
   const categoryKey = inferCategory(candidate.categoryKey, lower);
   const brand = normalizeBrand(candidate.brand) ?? inferBrand(lower);
@@ -25,7 +26,7 @@ export function resolveAcquisitionIdentity(candidate: AcquisitionCandidate): Nor
   const familyKey = normalizeKey([categoryKey, brand, model, variant, storageGb ? `${storageGb}gb` : '', carrierState !== 'unknown' ? carrierState : '', bundleState !== 'unknown' ? bundleState : ''].filter(Boolean).join('|'));
   const fingerprint = crypto.createHash('sha256').update([familyKey, conditionState, color ?? ''].join('|')).digest('hex');
 
-  return { originalTitle: candidate.title, normalizedTitle: normalizeForMatch(raw), categoryKey, familyKey, brand, model, variant, storageGb, color, carrierState, bundleState, conditionState, accessorySignals, requiredAttributesMissing, ambiguityFlags, identityConfidence, fingerprint };
+  return { originalTitle: candidate.title, normalizedTitle: normalizeForMatch(matchRaw), categoryKey, familyKey, brand, model, variant, storageGb, color, carrierState, bundleState, conditionState, accessorySignals, requiredAttributesMissing, ambiguityFlags, identityConfidence, fingerprint };
 }
 
 function inferCategory(existing: string | null, lower: string): string {

@@ -17,9 +17,14 @@ const cfg = {
   liveBufferSec: int(process.env.CAPITAL_GATE_MIN_SECONDS_TO_END, 3600),
   cashOnHand: num(process.env.ACQ_DEFAULT_CASH_ON_HAND_USD, 10000),
   policyVersion: process.env.ACQ_POLICY_VERSION || 'acq-domain1-schema-v3',
+  relaxedMargin: (process.env.ACQ_RELAXED_MARGIN_ENABLED || 'false') === 'true',
+  instanceId: crypto.randomUUID(),
 };
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
 const RANK: Record<string, number> = { BUY: 4, WATCH: 3, REVIEW: 2, REJECT: 1 };
+async function heartbeat(status: string): Promise<void> {
+  try { await pool.query(`insert into arb.worker_heartbeats (worker_name, worker_instance_id, status, details_json, last_seen_at, updated_at) values ($1,$2,$3,$4::jsonb,now(),now()) on conflict (worker_name, worker_instance_id) do update set status=excluded.status, details_json=excluded.details_json, last_seen_at=now(), updated_at=now()`, [cfg.workerName, cfg.instanceId, status, JSON.stringify({ mode: process.env.ACQUISITION_ENGINE_MODE })]); } catch (e) { log('heartbeat_failed', { error: msg(e) }); }
+}
 
 async function run(): Promise<void> {
   let running = true;
@@ -27,6 +32,7 @@ async function run(): Promise<void> {
   process.on('SIGINT', stop); process.on('SIGTERM', stop);
   log('starting', { mode: process.env.ACQUISITION_ENGINE_MODE });
   while (running) {
+    await heartbeat('running');
     let ids: number[] = [];
     try { ids = await claim(); } catch (e) { log('claim_failed', { error: msg(e) }); await sleep(cfg.idleMs); continue; }
     if (ids.length === 0) { await sleep(cfg.idleMs); continue; }
@@ -107,6 +113,31 @@ async function scoreOne(r: any): Promise<void> {
   if (endMs === null || Number.isNaN(endMs) || endMs <= Date.now()) { d1 = 'REJECT'; reasonCodes.push('LISTING_ENDED'); }
   else if (endMs <= Date.now() + cfg.liveBufferSec * 1000 && d1 === 'BUY') { d1 = 'REVIEW'; reasonCodes.push('LISTING_ENDING_SOON'); }
 
+  const sellPrice = numN(financial.conservativeResaleUsd) ?? numN(financial.expectedResaleUsd) ?? 0;
+  // Domain 1 phase-3 landed-cost max bid (Anthony 2026-06-23): 30% floor on total landed cost,
+  // relaxing to 22% only when relaxed mode is on AND $ profit >= relaxed_min_profit_usd.
+  const fvfUsd = numN(financial.feesEstimateUsd) ?? 0;
+  const sellShipSig = numN(financial.shippingEstimateUsd) ?? 0;
+  const sellShipUsd = sellShipSig > 0 ? sellShipSig : policy.sellingShippingFallbackUsd;            // live ?? $12
+  const saleReservesUsd = (numN(financial.returnReserveUsd) ?? 0) + (numN(financial.disputeReserveUsd) ?? 0)
+    + (numN(financial.damageReserveUsd) ?? 0) + (numN(financial.insuranceReserveUsd) ?? 0)
+    + (numN(financial.signatureReserveUsd) ?? 0) + (numN(financial.carrierRiskReserveUsd) ?? 0);
+  const fixedSaleUsd = (numN(financial.warehouseHandlingUsd) ?? 0) + (numN(financial.storageReserveUsd) ?? 0) + policy.packagingCostUsd;
+  const netResale = sellPrice - fvfUsd - policy.ebayFixedOrderFeeUsd - sellShipUsd - saleReservesUsd - fixedSaleUsd;
+  const inboundShipUsd = numN(r.inbound_shipping_usd) ?? 0;                                          // purchasing shipping (exact)
+  const landedMult = 1 + policy.buyersPremiumRate + policy.salesTaxRate;                             // premium + tax on the bid
+  const bidAtMargin = (m: number): number => netResale > 0 ? Math.max(0, (netResale / (1 + m) - inboundShipUsd) / landedMult) : 0;
+  const relaxedProfitUsd = netResale * (policy.relaxedMarginRate / (1 + policy.relaxedMarginRate));
+  const useRelaxed = cfg.relaxedMargin && relaxedProfitUsd >= policy.relaxedMinProfitUsd;
+  const maxBid = round(bidAtMargin(useRelaxed ? policy.relaxedMarginRate : policy.targetMarginRate), 2);
+  const isBuyNow = (numN(candidate.buyNowPrice) ?? 0) > 0;
+  const effCostBasis = isBuyNow ? (numN(candidate.buyNowPrice) ?? 0) : (numN(candidate.currentBidPrice) ?? numN(candidate.currentPrice) ?? 0);
+  const costBasisSource = isBuyNow ? 'BUY_NOW' : 'CURRENT_BID';
+  if (d1 === 'BUY' && !(effCostBasis > 0 && effCostBasis <= maxBid)) { d1 = 'REVIEW'; reasonCodes.push('BID_ABOVE_MAX_BID'); }
+  const winnableNow = effCostBasis > 0 && effCostBasis <= maxBid;
+  const isLiveAuction = costBasisSource === 'CURRENT_BID' && endMs !== null && !Number.isNaN(endMs) && endMs > Date.now();
+  const requiresRecheck = winnableNow && isLiveAuction;
+  const livenessStatus = (endMs === null || Number.isNaN(endMs)) ? 'UNKNOWN' : (endMs <= Date.now() ? 'ENDED' : (endMs <= Date.now() + cfg.liveBufferSec * 1000 ? 'ENDING_SOON' : 'LIVE'));
   let d1Rank: string = rules.rank;
   if (d1 === 'REJECT') d1Rank = 'REJECT'; else if (d1 === 'REVIEW') d1Rank = 'REVIEW';
   const legacy = r.legacy_decision ? String(r.legacy_decision) : null;
@@ -119,17 +150,28 @@ async function scoreOne(r: any): Promise<void> {
     `insert into arb.acquisition_shadow_decisions
        (opportunity_queue_id, listing_id, candidate_id, policy_version, legacy_decision, legacy_reason_codes, legacy_risk_flags, legacy_max_bid,
         domain1_decision, domain1_reason_codes, domain1_risk_flags, domain1_confidence, domain1_max_bid, profit_delta, roi_delta,
-        agreement_status, capital_safety_status, shipping_signal_status, domain1_input_hash, comparison_json, domain1_rank)
-     values ($1,$2::uuid,$3,$4,$5,$6::text[],$7::text[],$8,$9,$10::text[],$11::text[],$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21)`,
+        agreement_status, capital_safety_status, shipping_signal_status, domain1_input_hash, comparison_json, domain1_rank, effective_cost_basis_usd, cost_basis_source, liveness_status, requires_bid_recheck)
+     values ($1,$2::uuid,$3,$4,$5,$6::text[],$7::text[],$8,$9,$10::text[],$11::text[],$12,$13,$14,$15,$16,$17,$18,$19,$20::jsonb,$21,$22,$23,$24,$25)`,
     [r.oqid, r.listing_id, r.candidate_id, policy.policyVersion, legacy, toArr(r.legacy_reason_codes), toArr(r.legacy_risk_flags), numN(r.legacy_max_bid),
-     d1, dedupe(reasonCodes), dedupe(rules.riskFlags), rules.confidenceScore, numN(financial.maxBidUsd), profitDelta, roiDelta,
+     d1, dedupe(reasonCodes), dedupe(rules.riskFlags), rules.confidenceScore, maxBid, profitDelta, roiDelta,
      agreement, capStatus, shippingSignal.source, identity.fingerprint,
      JSON.stringify({ identity: { categoryKey: identity.categoryKey, confidence: identity.identityConfidence, familyKey: identity.familyKey },
        market: { soldCount: market.soldCount, soldMedian: market.soldMedian, liquidity: market.liquidityScore },
        financial: { purchase: financial.estimatedPurchasePriceUsd, resale: financial.conservativeResaleUsd, profit: financial.estimatedProfitUsd, roi: financial.estimatedRoi, maxBid: financial.maxBidUsd },
-       rules: { status: rules.status, rank: rules.rank, confidence: rules.confidenceScore }, gates: { liveness: reasonCodes.filter((x) => x.startsWith('LISTING_')), capital: capStatus, shipping: shippingSignal.source } }), d1Rank]);
+       rules: { status: rules.status, rank: rules.rank, confidence: rules.confidenceScore }, gates: { liveness: reasonCodes.filter((x) => x.startsWith('LISTING_')), capital: capStatus, shipping: shippingSignal.source } }), d1Rank, effCostBasis, costBasisSource, livenessStatus, requiresRecheck]);
   await pool.query(`update arb.acquisition_shadow_claims set last_status='scored', updated_at=now() where opportunity_queue_id=$1`, [r.oqid]);
   log('scored', { oqid: r.oqid, legacy, domain1: d1, agreement });
+}
+
+function zipPrices(samples: any, prices: any): any[] {
+  const s = Array.isArray(samples) ? samples : [];
+  const p = Array.isArray(prices) ? prices : [];
+  return s.map((row: any, i: number) => {
+    const pv = typeof p[i] === 'number' ? p[i] : (p[i] != null ? Number(p[i]) : null);
+    return (row && typeof row === 'object')
+      ? { ...row, price_usd: (row as any).price_usd ?? (row as any).price ?? pv }
+      : row;
+  });
 }
 
 function buildCandidate(r: any): AcquisitionCandidate {
@@ -141,7 +183,7 @@ function buildCandidate(r: any): AcquisitionCandidate {
     currentPrice: numN(r.current_price), currentBidPrice: numN(r.current_bid_price), buyNowPrice: numN(r.buy_now_price),
     inboundShippingUsd: numN(r.inbound_shipping_usd), quantityAvailable: 1,
     opportunityReasonJson: r.reason_json ?? {}, watchlistJson: r.watchlist_json ?? {},
-    ebayMarketJson: { sold_sample_json: r.sold_sample_json ?? [], active_sample_json: r.active_sample_json ?? [],
+    ebayMarketJson: { sold_sample_json: zipPrices(r.sold_sample_json, r.sold_prices_json), active_sample_json: zipPrices(r.active_sample_json, r.active_prices_json),
       sold_prices_json: r.sold_prices_json ?? [], active_prices_json: r.active_prices_json ?? [],
       sold_30d: r.sold_30d, active_count: r.active_count, median_sold_price: r.median_sold_price,
       p25_sold_price: r.p25_sold_price, p75_sold_price: r.p75_sold_price, median_active_price: r.median_active_price,
@@ -193,6 +235,8 @@ async function getPolicy(categoryKey: string): Promise<AcquisitionCategoryPolicy
     returnRiskRate: +row.return_risk_rate, damageRiskRate: +row.damage_risk_rate, disputeRiskRate: +row.dispute_risk_rate,
     marketplaceFeeRate: +row.marketplace_fee_rate, paymentFeeRate: +row.payment_fee_rate, salesTaxRate: +row.sales_tax_rate,
     warehouseHandlingUsd: +row.warehouse_handling_usd, storageReserveUsd: +row.storage_reserve_usd, packagingCostUsd: +row.packaging_cost_usd,
+    buyersPremiumRate: +row.buyers_premium_rate, ebayFixedOrderFeeUsd: +row.ebay_fixed_order_fee_usd, sellingShippingFallbackUsd: +row.selling_shipping_fallback_usd,
+    targetMarginRate: +row.target_margin_rate, relaxedMarginRate: +row.relaxed_margin_rate, relaxedMinProfitUsd: +row.relaxed_min_profit_usd,
     insuranceReserveRate: +row.insurance_reserve_rate, signatureReserveUsd: +row.signature_reserve_usd, carrierRiskRate: +row.carrier_risk_rate,
     shippingBufferUsd: +row.shipping_buffer_usd, maxItemCapitalPct: +row.max_item_capital_pct, maxCategoryCapitalPct: +row.max_category_capital_pct,
     maxFamilyCapitalPct: +row.max_family_capital_pct, cashReservePct: +row.cash_reserve_pct, highProfitReviewMultiplier: +row.high_profit_review_multiplier,
