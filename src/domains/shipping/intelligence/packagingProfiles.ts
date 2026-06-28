@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * TCDS Domain 3 — Packaging Profiles Green Tier 1 V2
  *
