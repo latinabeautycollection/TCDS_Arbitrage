@@ -359,6 +359,23 @@ async function processClaimedListing(input: {
         : null,
     });
 
+        if (listing.candidateId) {
+          await pool.query(
+            `
+            update arb.candidates
+            set
+              lifecycle_status = case
+                when lifecycle_status = 'RECOVERED_NEEDS_EBAY_SEARCH'
+                  then 'RECOVERED_EBAY_SEARCH_COMPLETED'
+                else lifecycle_status
+              end,
+              updated_at = now()
+            where id = $1
+            `,
+            [listing.candidateId],
+          );
+        }
+
     listingLogger.info('listing completed successfully', {
       operation: 'processClaimedListing',
       acceptedSoldCompCount: assessment.acceptedSoldComps.length,
@@ -1286,13 +1303,29 @@ async function claimNextListing(pool: Pool, logger: Logger): Promise<ListingJob 
           l.brand, l.model, l.variant, l.category_id, l.condition_text, l.current_price,
           l.buy_now_price, l.current_bid_price, l.inbound_shipping_usd, l.total_cost,
                     l.priority, coalesce(l.comp_attempts, 0) as comp_attempts, coalesce(l.comp_status, 'pending') as comp_status,
-          (select id from arb.candidates ca where ca.listing_id = l.id order by id desc limit 1) as candidate_id
+                    ca.id as candidate_id
         from arb.listings l
-                where coalesce(l.next_comp_attempt_at, now()) <= now()
-          and (
-            coalesce(l.comp_status, 'pending') in ('pending', 'retry')
-            or l.comp_status = 'processing'
-          )
+join lateral (
+  select ca.*
+  from arb.candidates ca
+  where ca.listing_id = l.id
+  order by ca.id desc
+  limit 1
+) ca on true
+where coalesce(l.next_comp_attempt_at, now()) <= now()
+  and (
+    coalesce(l.comp_status, 'pending') in ('pending', 'retry')
+    or l.comp_status = 'processing'
+    or (
+      ca.status = 'matched'
+      and ca.lifecycle_status = 'RECOVERED_NEEDS_EBAY_SEARCH'
+      and not exists (
+        select 1
+        from arb.ebay_comps ec
+        where ec.candidate_id = ca.id
+      )
+    )
+  )
           and (l.comp_locked_at is null or l.comp_locked_at < now() - make_interval(secs => $1::int))
         order by
           (l.end_time is not null and l.end_time > now()) desc,            -- live auctions first

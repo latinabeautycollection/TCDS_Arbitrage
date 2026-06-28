@@ -396,7 +396,7 @@ function hardenSafetyEvaluation(input: {
 
   const hardBlockReasons = uniqueStrings([
     ...merged.hardBlockReasons,
-    ...deriveListingHardBlocks(input.candidate),
+    ...deriveListingHardBlocks(input.candidate, input.financialMaxBidUsd),
   ]);
 
   const softReviewReasons = uniqueStrings([
@@ -444,11 +444,18 @@ function hardenRuleEvaluation(rule: EconomicRuleEvaluation, safety: SafetyEvalua
   };
 }
 
-function deriveListingHardBlocks(candidate: AcquisitionCandidate): string[] {
+function deriveListingHardBlocks(
+  candidate: AcquisitionCandidate,
+  financialMaxBidUsd: number | null,
+): string[] {
   const reasons: string[] = [];
+
   const listingStatus = candidate.listingStatus?.toLowerCase().trim();
 
-  if (listingStatus && ['ended', 'expired', 'sold', 'closed', 'cancelled', 'canceled', 'inactive'].includes(listingStatus)) {
+  if (
+    listingStatus &&
+    ['ended', 'expired', 'sold', 'closed', 'cancelled', 'canceled', 'inactive'].includes(listingStatus)
+  ) {
     reasons.push('CAPITAL_GATE_LISTING_NOT_LIVE');
   }
 
@@ -459,7 +466,14 @@ function deriveListingHardBlocks(candidate: AcquisitionCandidate): string[] {
     }
   }
 
-  return reasons;
+  const liveBid = Number(candidate.currentBidPrice ?? candidate.currentPrice ?? 0);
+  const maxBid = Number(financialMaxBidUsd ?? 0);
+
+  if (liveBid > 0 && maxBid > 0 && liveBid > maxBid) {
+    reasons.push('CAPITAL_GATE_PRICE_EXCEEDS_MAX_BID');
+  }
+
+  return uniqueStrings(reasons);
 }
 
 function summarizeDecisions(decisions: readonly ScoredAcquisitionDecision[]): {

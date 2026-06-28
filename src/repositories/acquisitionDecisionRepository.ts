@@ -440,11 +440,15 @@ export class AcquisitionDecisionRepository {
       current_propertyroom_bid: d.candidate.currentBidPrice ?? d.candidate.currentPrice ?? d.candidate.buyNowPrice,
       estimated_purchase_price: d.financial.estimatedPurchasePriceUsd,
       purchase_price_basis: d.financial.purchasePriceBasis,
-      purchase_price_inputs_json: {
+            purchase_price_inputs_json: {
         currentPrice: d.candidate.currentPrice,
         currentBidPrice: d.candidate.currentBidPrice,
         buyNowPrice: d.candidate.buyNowPrice,
         inboundShippingUsd: d.candidate.inboundShippingUsd,
+        estimatedPurchasePriceUsd: d.financial.estimatedPurchasePriceUsd,
+        purchasePriceBasis: d.financial.purchasePriceBasis,
+        maxBidUsd: d.financial.maxBidUsd,
+        auctionMaxBidFormula: 'max(currentBid*1.75, acceptedCompMedian*0.35, currentBid+25)',
       },
       source_price_snapshot_at: new Date(),
       expected_total_cost_basis_usd: d.financial.deployableCapitalUsd,
