@@ -40,7 +40,7 @@ export class CandidateRepository {
 
   async markMatched(input: {
     candidateId: number;
-    watchlistId: number;
+     watchlistId: number | null;
     matchScore: number;
     processName: string;
     processRunId: string;
