@@ -1313,6 +1313,7 @@ join lateral (
   limit 1
 ) ca on true
 where coalesce(l.next_comp_attempt_at, now()) <= now()
+  and (l.end_time is null or l.end_time > now())
   and (
     coalesce(l.comp_status, 'pending') in ('pending', 'retry')
     or l.comp_status = 'processing'
