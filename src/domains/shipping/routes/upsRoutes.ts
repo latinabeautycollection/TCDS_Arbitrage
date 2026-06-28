@@ -1,0 +1,23 @@
+import { Router } from "express";
+import { Pool } from "pg";
+import { UpsApi } from "../providers/upsApi";
+import { UpsRepository } from "../repositories/upsRepository";
+import { UpsProfitProtectionEngine } from "../engines/upsProfitProtectionEngine";
+import { UpsForensicClaimEngine } from "../engines/upsForensicClaimEngine";
+import { getUpsEnv } from "../config/upsEnv";
+import { upsWebhookPayloadSchema } from "../validators/upsValidators";
+export function buildUpsRoutes(db?: Pool, api=new UpsApi()): Router { const router=Router(); const env=getUpsEnv(); const repo=db?new UpsRepository(db):undefined; const profitEngine=new UpsProfitProtectionEngine(api); const claimEngine=new UpsForensicClaimEngine();
+  router.get("/health/ups/oauth", async (_req,res,next)=>{ try{res.json(await api.healthCheck());}catch(e){next(e);} });
+  router.post("/shipping/ups/address/validate", async (req,res,next)=>{ try{ const response=await api.validateAddress(req.body); await repo?.recordAddressValidation({input:req.body,response}); res.json(response);}catch(e){next(e);} });
+  router.post("/shipping/ups/time-in-transit", async (req,res,next)=>{ try{ const response=await api.timeInTransit(req.body); await repo?.recordRateQuote({quoteType:"TIME_IN_TRANSIT",request:req.body,response}); res.json(response);}catch(e){next(e);} });
+  router.post("/shipping/ups/intelligence/decide", async (req,res,next)=>{ try{res.json(await profitEngine.decide(req.body));}catch(e){next(e);} });
+  router.post("/shipping/ups/shipments", async (req,res,next)=>{ try{res.json(await api.createShipment(req.body));}catch(e){next(e);} });
+  router.delete("/shipping/ups/shipments/:shipmentIdentificationNumber", async (req,res,next)=>{ try{res.json(await api.voidShipment(req.params.shipmentIdentificationNumber, req.query.trackingnumber as string|undefined));}catch(e){next(e);} });
+  router.post("/shipping/ups/labels/recovery", async (req,res,next)=>{ try{res.json(await api.labelRecovery(req.body));}catch(e){next(e);} });
+  router.get("/shipping/ups/tracking/:trackingNumber", async (req,res,next)=>{ try{ const response=await api.track(req.params.trackingNumber,{ returnSignature:req.query.returnSignature==="true", returnMilestones:req.query.returnMilestones!=="false", returnPOD:req.query.returnPOD!=="false" }); await repo?.recordTracking({trackingNumber:req.params.trackingNumber,response}); res.json(response);}catch(e){next(e);} });
+  router.get("/shipping/ups/tracking/reference/:referenceNumber", async (req,res,next)=>{ try{res.json(await api.trackByReference(req.params.referenceNumber, req.query));}catch(e){next(e);} });
+  router.post("/shipping/ups/tracking/subscriptions", async (req,res,next)=>{ try{res.json(await api.subscribeTracking(req.body));}catch(e){next(e);} });
+  router.post("/shipping/ups/intelligence/claim-readiness", async (req,res,next)=>{ try{res.json(claimEngine.score(req.body));}catch(e){next(e);} });
+  router.post("/shipping/ups/locator", async (req,res,next)=>{ try{res.json(await api.locator(req.body, req.query.reqOption as string|undefined));}catch(e){next(e);} });
+  router.post("/webhooks/shipping/ups", async (req,res,next)=>{ try{ const credential=req.header("credential")??undefined; const credentialValid=env.UPS_TRACKING_WEBHOOK_REQUIRE_CREDENTIAL ? Boolean(credential && credential===env.UPS_TRACKING_WEBHOOK_CREDENTIAL) : true; if(!credentialValid){res.status(401).json({ok:false,error:"Invalid UPS webhook credential."}); return;} const payload=upsWebhookPayloadSchema.parse(req.body); const id=await repo?.recordWebhook({headers:req.headers,payload,credential,credentialValid}); res.status(200).json({ok:true,carrier:"UPS",id}); }catch(e){next(e);} });
+  return router; }

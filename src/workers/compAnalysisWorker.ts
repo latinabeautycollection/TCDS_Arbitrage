@@ -1294,7 +1294,10 @@ async function claimNextListing(pool: Pool, logger: Logger): Promise<ListingJob 
             or l.comp_status = 'processing'
           )
           and (l.comp_locked_at is null or l.comp_locked_at < now() - make_interval(secs => $1::int))
-        order by coalesce(l.priority, 1000) asc, l.id asc
+        order by
+          (l.end_time is not null and l.end_time > now()) desc,            -- live auctions first
+          case when l.end_time > now() then l.end_time end asc nulls last, -- soonest-closing live first
+          coalesce(l.priority, 1000) asc, l.id asc
         limit 1
         for update skip locked
       )

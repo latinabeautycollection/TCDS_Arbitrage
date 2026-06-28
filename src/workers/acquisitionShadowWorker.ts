@@ -18,6 +18,8 @@ const cfg = {
   cashOnHand: num(process.env.ACQ_DEFAULT_CASH_ON_HAND_USD, 10000),
   policyVersion: process.env.ACQ_POLICY_VERSION || 'acq-domain1-schema-v3',
   relaxedMargin: (process.env.ACQ_RELAXED_MARGIN_ENABLED || 'false') === 'true',
+  allowEstimateShipping: (process.env.ACQ_ALLOW_ESTIMATE_SHIPPING || 'false') === 'true',
+  estimateShippingUsd: num(process.env.ACQ_ESTIMATE_SHIPPING_USD, 12),
   instanceId: crypto.randomUUID(),
 };
 const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 5 });
@@ -206,6 +208,7 @@ function buildSafety(r: any): SafetyEvaluation {
 function buildShipping(r: any): Partial<ShippingSignal> {
   const cost = numN(r.quoted_label_cost_usd);
   if (cost && cost > 0) return { source: 'shipengine', outboundShippingUsd: cost, confidence: 0.8, carrierCode: r.carrier_code ?? null, serviceCode: r.service_code ?? null, requestId: null, riskFlags: [] };
+  if (cfg.allowEstimateShipping) return { source: 'policy_estimate', outboundShippingUsd: cfg.estimateShippingUsd, confidence: 0.7, carrierCode: null, serviceCode: null, requestId: null, riskFlags: ['SHIPPING_ESTIMATE_INTERIM'] };
   return { source: 'missing', outboundShippingUsd: undefined, confidence: 0, carrierCode: null, serviceCode: null, requestId: null, riskFlags: ['SHIPENGINE_SHIPPING_SIGNAL_MISSING'] };
 }
 

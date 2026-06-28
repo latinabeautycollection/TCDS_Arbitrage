@@ -1,0 +1,7 @@
+import { getUpsEnv } from "../config/upsEnv";
+import { UpsApi } from "../providers/upsApi";
+import { UpsDecisionResult, UpsRateShopInput } from "../models/upsTypes";
+export class UpsProfitProtectionEngine { private readonly env=getUpsEnv(); constructor(private readonly api=new UpsApi()) {}
+  async decide(input: UpsRateShopInput): Promise<UpsDecisionResult> { const riskScore=this.basicRiskScore(input); const response=await this.api.timeInTransit(input); return { carrier:"UPS", selectedServiceCode:input.serviceCode??this.env.UPS_DEFAULT_SERVICE_CODE, selectedServiceName:input.serviceName??this.env.UPS_DEFAULT_SERVICE_NAME, selectedPriceUsd:undefined, cheapestPriceUsd:undefined, riskScore, profitScore:75, confidenceScore:70, humanReviewRequired:riskScore>=this.env.UPS_HUMAN_REVIEW_RISK_SCORE, executiveHoldRequired:riskScore>=this.env.UPS_EXECUTIVE_HOLD_RISK_SCORE, reason:"UPS decision generated from transit/risk/protection rules. Rating can be wired when UPS rating entitlement is active.", raw:{response} }; }
+  private basicRiskScore(input: UpsRateShopInput): number { let score=20; if ((input.itemValue??0)>=this.env.UPS_INSURANCE_REQUIRED_MIN_VALUE_USD && !input.requireInsurance) score+=20; if ((input.itemValue??0)>=this.env.UPS_SIGNATURE_REQUIRED_MIN_VALUE_USD && !input.requireSignature) score+=20; if (input.fragile) score+=15; if (input.weight>50) score+=15; if (input.length*input.width*input.height>1728) score+=10; return Math.min(score,100); }
+}

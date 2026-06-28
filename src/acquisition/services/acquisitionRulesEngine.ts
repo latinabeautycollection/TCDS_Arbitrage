@@ -27,8 +27,8 @@ export function evaluateAcquisitionRules(input: {
   if (input.market.activeToSoldRatio !== null && input.market.activeToSoldRatio > input.policy.maxActiveSoldRatio) rejectReasons.push('HIGH_ACTIVE_TO_SOLD_RATIO');
   if (input.market.volatilityScore > input.policy.maxVolatility) reviewReasons.push('HIGH_VOLATILITY');
   if (input.market.estimatedDaysToSale !== null && input.market.estimatedDaysToSale > 90) reviewReasons.push('SLOW_SELL_THROUGH');
-  if (input.financial.shippingSignal.source !== 'shipengine') reviewReasons.push('SHIPENGINE_RATE_REQUIRED_FOR_BUY');
-  if (input.financial.shippingSignal.confidence < 0.7) reviewReasons.push('SHIPPING_UNCERTAINTY');
+  if (!['shipengine','policy_estimate'].includes(input.financial.shippingSignal.source)) reviewReasons.push('SHIPENGINE_RATE_REQUIRED_FOR_BUY');
+  if (input.financial.shippingSignal.confidence < 0.7 && input.financial.shippingSignal.source !== 'policy_estimate') reviewReasons.push('SHIPPING_UNCERTAINTY');
   if (input.financial.estimatedProfitUsd === null || input.financial.estimatedProfitUsd < input.policy.minProfitUsd) rejectReasons.push('INSUFFICIENT_PROFIT');
   if (input.financial.estimatedRoi === null || input.financial.estimatedRoi < input.policy.minRoi) rejectReasons.push('ROI_BELOW_THRESHOLD');
   if (input.financial.deployableUnits <= 0) rejectReasons.push('NO_DEPLOYABLE_UNITS');
@@ -41,7 +41,7 @@ export function evaluateAcquisitionRules(input: {
   const riskScore = risk(input.market.volatilityScore, input.market.saturationScore, 1 - input.financial.shippingSignal.confidence, riskFlags.length);
   const priorityScore = priority(input.financial, input.market, confidenceScore, riskScore, input.policy.categoryRankWeight, input.relativeStrength ?? 1);
   let status: RuleEvaluation['status'] = 'REJECT';
-  if (rejectReasons.length === 0 && reviewReasons.length === 0 && confidenceScore >= input.policy.minIdentityConfidence && input.safety.ok && input.safety.safetyScore >= input.policy.minSafetyScoreForBuy && input.financial.shippingSignal.source === 'shipengine') status = 'BUY';
+  if (rejectReasons.length === 0 && reviewReasons.length === 0 && confidenceScore >= input.policy.minIdentityConfidence && input.safety.ok && input.safety.safetyScore >= input.policy.minSafetyScoreForBuy && ['shipengine','policy_estimate'].includes(input.financial.shippingSignal.source)) status = 'BUY';
   else if (rejectReasons.length === 0 && (input.financial.estimatedProfitUsd ?? 0) > 0) status = 'REVIEW';
   else if ((input.financial.estimatedProfitUsd ?? 0) > 0 && input.market.soldCount >= Math.max(2, Math.floor(input.policy.minSoldCount / 2))) status = 'WATCH';
 

@@ -12,6 +12,11 @@ import { JobStore } from './services/jobStore';
 import { HealthService } from './services/healthService';
 import { MetricsService } from './services/metricsService';
 import { createMetricsRouter } from './routes/metrics';
+import { createAcquisitionDecisionHealthRouter } from './routes/acquisitionDecisionHealthRoutes';
+import { createCapitalAllocationHealthRouter } from './routes/capitalAllocationHealthRoutes';
+import { buildFedExRoutes } from './domains/shipping/routes/fedexRoutes';
+import { buildUspsRoutes } from './domains/shipping/routes/uspsRoutes';
+import { buildShipEngineRoutes } from './domains/shipping/routes/shipEngineRoutes';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -150,6 +155,14 @@ function mountApiRoutes(input: {
   app.use(shipengineWebhookRoutes);
   app.use(ebayProbeRoutes);
 
+  // ------------------------------------------------------------------------
+  // Domain 1 - Acquisition decision engine health/forensics (read-only)
+  // ------------------------------------------------------------------------
+  app.use('/acquisition', createAcquisitionDecisionHealthRouter({ pool }));
+  app.use('/capital-allocation', createCapitalAllocationHealthRouter({ pool }));
+  app.use(buildFedExRoutes(pool));
+  app.use(buildUspsRoutes(pool));
+  app.use(buildShipEngineRoutes(pool));
   // --------------------------------------------------------------------------
   // Prong 2 — Namespaced worker/readiness/metrics surfaces
   // Must remain mounted under /prong2 so root health endpoints do not collide
