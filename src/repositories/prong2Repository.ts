@@ -149,7 +149,7 @@ export interface ClaimCandidatesInput {
 
 export interface QueueOpportunityIdempotentInput {
   candidate: ClaimedCandidate;
-  watchlistId: number;
+  watchlistId: number | null;
   matchScore: number;
   priorityScore: number;
   reasonJson: Record<string, unknown>;
@@ -909,7 +909,10 @@ public async createMarketIntelRun(input: CreateMarketIntelRunInput): Promise<num
   join arb.listings l on l.id = c.listing_id
   where c.id = $1
     and (l.end_time is null or l.end_time > now())
-    and coalesce(c.identity_confidence, 0) >= 0.5
+    and (
+      coalesce(c.identity_confidence, 0) >= 0.5
+      or ($2 is null and coalesce(c.current_price, 0) + coalesce(c.inbound_shipping_usd, 0) <= 100)
+    )
   on conflict do nothing
   returning id
   `,

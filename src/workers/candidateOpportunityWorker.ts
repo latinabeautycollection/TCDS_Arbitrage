@@ -20,7 +20,7 @@ const actorRepo = new UserActorRepository();
 
 export interface CandidateOpportunityJob {
   candidateId: number;
-  watchlistId: number;
+ watchlistId: number | null;
   matchScore: number;
   priorityScore: number;
   correlationId: string;
@@ -96,8 +96,9 @@ export const candidateOpportunityWorker = createWorker<CandidateOpportunityJob>(
           WORKER
         );
 
-        const phaseSummary = `Candidate ${candidate.id} matched to watchlist ${job.data.watchlistId} with score ${job.data.matchScore}`;
-
+             const phaseSummary = job.data.watchlistId === null
+        ? `Candidate ${candidate.id} queued without watchlist match for eBay comp/profit analysis`
+        : `Candidate ${candidate.id} matched to watchlist ${job.data.watchlistId} with score ${job.data.matchScore}`;
         const existing = await oppRepo.findExisting(candidate.id, job.data.watchlistId);
 
         let queued;

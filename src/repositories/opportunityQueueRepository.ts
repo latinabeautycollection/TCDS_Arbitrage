@@ -3,13 +3,13 @@ import { PoolClient } from 'pg';
 export class OpportunityQueueRepository {
   constructor(private readonly client: PoolClient) {}
 
-  async findExisting(candidateId: number, watchlistId: number) {
+async findExisting(candidateId: number, watchlistId: number | null) {
     const { rows } = await this.client.query(
       `
       select *
       from arb.opportunity_queue
       where candidate_id = $1
-        and watchlist_id = $2
+     and watchlist_id is not distinct from $2
       order by id desc
       limit 1
       `,
@@ -20,7 +20,7 @@ export class OpportunityQueueRepository {
 
   async insertQueued(input: {
     candidateId: number;
-    watchlistId: number;
+    watchlistId: number | null;
     matchScore: number;
     priorityScore: number;
     reasonJson: Record<string, unknown>;

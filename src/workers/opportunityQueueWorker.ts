@@ -130,22 +130,59 @@ export async function runOpportunityQueueWorker(signal?: AbortSignal): Promise<v
             limit: config.watchlistBatchSize,
           });
 
+          const candidateTotalCost =
+            (candidate.currentPrice ?? 0) + (candidate.inboundShippingUsd ?? 0);
+
+          /**
+           * GREEN TIER 1 FIX:
+           * Watchlist is a priority signal, not an eligibility gate.
+           * If narrowed watchlist fails, still queue candidate for downstream eBay comp/profit analysis.
+           */
           if (narrowedWatchlist.length === 0) {
             await repository.saveCandidateBestMatch({
               candidateId: candidate.candidateId,
               bestWatchlistId: null,
               bestMatchScore: null,
               bestMatchReasonJson: {
-                summary: { reason: 'no_narrowed_watchlist_candidates' },
+                summary: {
+                  reason: 'no_narrowed_watchlist_candidates_fallback_queued',
+                  action: 'queued_without_watchlist_match',
+                  routing: 'ebay_comp_profit_required',
+                },
                 candidateIdentity,
+                candidateTotalCost,
               },
-              finalStatus: 'no_match',
+              finalStatus: 'matched',
             });
+
+            const inserted = await repository.queueOpportunityIdempotent({
+              candidate,
+              watchlistId: null,
+              matchScore: 0,
+              priorityScore: candidateTotalCost <= 100 ? 0.45 : 0.25,
+              reasonJson: {
+                fallback: true,
+                reason: 'No narrowed watchlist match, but candidate remains eligible for eBay comp/profit analysis.',
+                candidateIdentity,
+                candidateTotalCost,
+              },
+            });
+
+            if (inserted) {
+              incCounter('opportunities_queued');
+              incCounter('opportunities_queued_without_watchlist');
+            }
+
+            logger.info('candidate queued without narrowed watchlist match', {
+              operation: 'runOpportunityQueueWorker',
+              candidateId: candidate.candidateId,
+              listingId: candidate.listingId,
+              candidateTotalCost,
+              inserted,
+            });
+
             continue;
           }
-
-          const candidateTotalCost =
-            (candidate.currentPrice ?? 0) + (candidate.inboundShippingUsd ?? 0);
 
           let best:
             | {
@@ -244,45 +281,55 @@ export async function runOpportunityQueueWorker(signal?: AbortSignal): Promise<v
           }
 
           const shouldQueue =
-            best.score.matchClass === 'exact_match' ||
-            best.score.matchClass === 'strong_family_match' ||
-            best.score.matchClass === 'probable_match' ||
-            best.score.matchClass === 'weak_match';
+  best.score.matchClass === 'exact_match' ||
+  best.score.matchClass === 'strong_family_match' ||
+  best.score.matchClass === 'probable_match' ||
+  best.score.matchClass === 'weak_match';
 
-          await repository.saveCandidateBestMatch({
-            candidateId: candidate.candidateId,
-            bestWatchlistId: best.watchlistId,
-            bestMatchScore: best.score.finalScore,
-            bestMatchReasonJson: {
-              summary: {
-                reason: shouldQueue ? 'candidate_queued' : 'match_below_queue_class',
-                familyKey: best.familyKey,
-                familyName: best.familyName,
-                matchClass: best.score.matchClass,
-              },
-              diagnostics: best.diagnostics,
-            },
-            finalStatus: shouldQueue ? 'matched' : 'no_match',
-          });
+const fallbackQueue =
+  !shouldQueue &&
+  candidateTotalCost <= 100 &&
+  best.score.finalScore >= 0.15;
 
-          if (!shouldQueue) {
-            continue;
-          }
+await repository.saveCandidateBestMatch({
+  candidateId: candidate.candidateId,
+  bestWatchlistId: best.watchlistId,
+  bestMatchScore: best.score.finalScore,
+  bestMatchReasonJson: {
+    summary: {
+      reason: shouldQueue
+        ? 'candidate_queued'
+        : fallbackQueue
+          ? 'low_score_fallback_queued_for_profit_analysis'
+          : 'match_below_queue_class',
+      familyKey: best.familyKey,
+      familyName: best.familyName,
+      matchClass: best.score.matchClass,
+    },
+    diagnostics: best.diagnostics,
+  },
+  finalStatus: shouldQueue || fallbackQueue ? 'matched' : 'no_match',
+});
 
-          const inserted = await repository.queueOpportunityIdempotent({
-            candidate,
-            watchlistId: best.watchlistId,
-            matchScore: best.score.finalScore,
-            priorityScore: best.priorityScore,
-            reasonJson: {
-              familyKey: best.familyKey,
-              familyName: best.familyName,
-              matchClass: best.score.matchClass,
-              matchScore: best.score.finalScore,
-              predictedProfitUsd: best.predictedProfitUsd,
-              diagnostics: best.diagnostics,
-            },
-          });
+if (!shouldQueue && !fallbackQueue) {
+  continue;
+}
+
+const inserted = await repository.queueOpportunityIdempotent({
+  candidate,
+  watchlistId: best.watchlistId,
+  matchScore: best.score.finalScore,
+  priorityScore: fallbackQueue ? 0.35 : best.priorityScore,
+  reasonJson: {
+    fallback: fallbackQueue,
+    familyKey: best.familyKey,
+    familyName: best.familyName,
+    matchClass: best.score.matchClass,
+    matchScore: best.score.finalScore,
+    predictedProfitUsd: best.predictedProfitUsd,
+    diagnostics: best.diagnostics,
+  },
+});
 
           if (inserted) {
             incCounter('opportunities_queued');

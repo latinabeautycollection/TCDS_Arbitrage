@@ -8,6 +8,7 @@ type CounterKey =
   | 'candidates_matched'
   | 'candidates_no_match'
   | 'opportunities_queued'
+  | 'opportunities_queued_without_watchlist'
   | 'worker_failures';
 
 type GaugeKey =
