@@ -10,6 +10,8 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
+    "worker:capital-allocation": "tsx src/workers/capitalAllocationWorker.ts",
+    "preflight:capital-allocation": "bash scripts/preflight-capital-allocation.sh",
     "certify:phase2": "jest --runInBand src/tests/certification",
     "certify:report": "ts-node src/scripts/certify.ts",
     "clean": "rimraf dist",
@@ -36,19 +38,22 @@
     "start:workers": "node dist/src/workers/workerBootstrap.js",
     "dev:workers": "tsx src/workers/workerBootstrap.ts",
     "capital:safety:phase2-hardening": "node dist/workers/phase2HardeningWorker.js",
-"capital:safety:grounding": "node dist/workers/prong2CompSetGroundingWorker.js",
-"capital:safety:validate": "node dist/scripts/validatePhase2GreenTier.js",
-"capital:safety:certify-replay": "node dist/scripts/certifyPhase2Replay.js"
+    "capital:safety:grounding": "node dist/workers/prong2CompSetGroundingWorker.js",
+    "capital:safety:validate": "node dist/scripts/validatePhase2GreenTier.js",
+    "capital:safety:certify-replay": "node dist/scripts/certifyPhase2Replay.js",
+    "usps:smoke": "tsx src/scripts/usps-smoke-test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.100.1",
+    "axios": "^1.16.1",
     "bullmq": "^5.73.4",
-    "dotenv": "17.3.1",
+    "dotenv": "^17.3.1",
     "express": "5.2.1",
     "ioredis": "^5.10.1",
+    "p-retry": "^7.1.1",
     "pg": "8.20.0",
     "pino": "^10.3.1",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
