@@ -16,7 +16,7 @@ export async function addIdempotentJob<T>({
   idempotencyKey,
   jobName
 }: IdempotentAddInput<T>) {
-  const stableJobId = `${queueName}:${idempotencyKey}`;
+  const stableJobId = `${queueName}:${idempotencyKey}`.replace(/:/g, '_');
   return queue.add(jobName ?? queueName, payload, {
     jobId: stableJobId,
     deduplication: { id: stableJobId }
