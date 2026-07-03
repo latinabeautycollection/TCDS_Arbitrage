@@ -29,7 +29,7 @@
     "start:watchlist-worker": "node dist/workers/watchlistWorker.js",
     "start:opportunity-queue-worker": "node dist/workers/opportunityQueueWorker.js",
     "check:deps": "bash scripts/check-deps.sh",
-    "test": "jest --runInBand",
+    "test": "jest --runInBand --forceExit",
     "test:watch": "jest --watch",
     "test:prong2": "jest src/__tests__/prong2Readiness.test.ts src/__tests__/prong2HealthRoutes.test.ts --runInBand",
     "upgrade:node20": "sudo bash scripts/upgrade-node20-rebuild-refresh.sh",
