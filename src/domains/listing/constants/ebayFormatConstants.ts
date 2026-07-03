@@ -1,0 +1,1 @@
+export const EBAY_TITLE_MAX_LENGTH = 80; export const EBAY_DEFAULT_FORMAT = 'FIXED_PRICE';

@@ -1,0 +1,3 @@
+import { fetchJson } from '../../utils/fetchJson';
+import { EbayAuthClient } from './ebayAuthClient';
+export class EbayFulfillmentClient { constructor(private auth=new EbayAuthClient(), private env=process.env.EBAY_ENV||'production'){} private base(){return this.env==='sandbox'?'https://api.sandbox.ebay.com':'https://api.ebay.com'} private async h(){return {authorization:`Bearer ${await this.auth.getAccessToken(['https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly','https://api.ebay.com/oauth/api_scope/sell.fulfillment'])}`}} async getOrders(filter?:string){const qs=filter?`?filter=${encodeURIComponent(filter)}`:'';return fetchJson<any>(`${this.base()}/sell/fulfillment/v1/order${qs}`,{headers:await this.h()})} }
