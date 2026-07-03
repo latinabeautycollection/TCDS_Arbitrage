@@ -162,9 +162,12 @@ function mountApiRoutes(input: {
   // ------------------------------------------------------------------------
   app.use('/acquisition', createAcquisitionDecisionHealthRouter({ pool }));
   app.use('/capital-allocation', createCapitalAllocationHealthRouter({ pool }));
-  app.use(buildFedExRoutes(pool));
-  app.use(buildUspsRoutes(pool));
-  app.use(buildShipEngineRoutes(pool));
+  const safeMount = (label: string, fn: () => void) => {
+    try { fn(); } catch (err) { logger.error(`carrier route mount [${label}] failed; skipping: ${err instanceof Error ? err.message : String(err)}`); }
+  };
+  safeMount('fedex', () => app.use(buildFedExRoutes(pool)));
+  safeMount('usps', () => app.use(buildUspsRoutes(pool)));
+  safeMount('shipengine', () => app.use(buildShipEngineRoutes(pool)));
   app.use('/domain4/listing', listingRoutes);
   app.use('/domain4/listing', enterpriseListingRoutes);
   // --------------------------------------------------------------------------
