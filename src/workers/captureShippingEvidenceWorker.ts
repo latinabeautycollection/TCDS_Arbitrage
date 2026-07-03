@@ -362,7 +362,7 @@ export const captureShippingEvidenceWorker = createWorker(
         return claimed;
       });
 
-      if (!stepContext) return;
+      if (!stepContext) return; 
 
       const result = await withTx(async (client) => {
         const context = await resolveShippingContext(client, job.data);
