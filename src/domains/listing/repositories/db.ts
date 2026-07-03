@@ -1,3 +1,7 @@
-import { Pool } from 'pg';
-let pool: Pool | null = null;
-export function getPool(): Pool { if (!pool) pool = new Pool({ connectionString: process.env.DATABASE_URL }); return pool; }
+import type { Pool } from 'pg';
+import { pool } from '../../../db/pool';
+
+// Reuse the app's shared, SSL-configured pool (Supabase self-signed cert in chain).
+export function getPool(): Pool {
+  return pool;
+}
