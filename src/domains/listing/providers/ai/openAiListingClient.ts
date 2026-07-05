@@ -10,15 +10,16 @@ export class OpenAiListingClient {
     if (!this.apiKey) return this.fallback(input);
     const started = Date.now();
     const schema = {
-      name: 'listing_output', strict: true, schema: { type: 'object', additionalProperties: false, required: ['title','descriptionHtml','bulletPoints','seoKeywords','itemSpecifics','conditionText','defectDisclosures','listingFormat','listingDuration','quantity','listingPriceUsd','photoUrls','persuasiveAngles','searchIntentKeywords','buyerConfidencePhrases'], properties: {
+      name: 'listing_output', strict: false, schema: { type: 'object', additionalProperties: false, required: ['title','descriptionHtml','bulletPoints','seoKeywords','itemSpecifics','conditionText','defectDisclosures','listingFormat','listingDuration','quantity','listingPriceUsd','photoUrls','persuasiveAngles','searchIntentKeywords','buyerConfidencePhrases'], properties: {
         title:{type:'string'}, subtitle:{type:['string','null']}, descriptionHtml:{type:'string'}, bulletPoints:{type:'array',items:{type:'string'}}, seoKeywords:{type:'array',items:{type:'string'}}, itemSpecifics:{type:'object',additionalProperties:{type:['string','array'],items:{type:'string'}}}, conditionId:{type:['string','null']}, conditionText:{type:'string'}, defectDisclosures:{type:'array',items:{type:'string'}}, listingFormat:{type:'string',enum:['FIXED_PRICE','AUCTION']}, listingDuration:{type:'string',enum:['GTC','DAYS_7','DAYS_10']}, quantity:{type:'number'}, listingPriceUsd:{type:'number'}, minAcceptablePriceUsd:{type:['number','null']}, categoryId:{type:['string','null']}, photoUrls:{type:'array',items:{type:'string'}}, persuasiveAngles:{type:'array',items:{type:'string'}}, searchIntentKeywords:{type:'array',items:{type:'string'}}, buyerConfidencePhrases:{type:'array',items:{type:'string'}} }
       }};
     const res = await fetchJson<any>('https://api.openai.com/v1/responses', {
       method: 'POST', timeoutMs: 45000,
       headers: { authorization: `Bearer ${this.apiKey}` },
-      body: { model: aiListingConfig.openAiModel, input: [{ role: 'system', content: 'Generate accurate, defensible, SEO-rich eBay listing JSON. Do not invent facts.' }, { role: 'user', content: JSON.stringify(input) }], text: { format: { type: 'json_schema', ...schema } } }
+      body: { model: aiListingConfig.openAiModel, input: [{ role: 'system', content: 'Generate accurate, defensible, SEO-rich eBay listing JSON. Return ONLY raw JSON with no markdown code fences. Do not invent facts.' }, { role: 'user', content: JSON.stringify(input) }], text: { format: { type: 'json_schema', ...schema } } }
     });
-    const text = res.output_text || res.output?.[0]?.content?.[0]?.text || '{}';
+    const rawText = res.output_text || res.output?.[0]?.content?.[0]?.text || '{}';
+    const text = rawText.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
     return { provider:'OPENAI', model:aiListingConfig.openAiModel, taskName:'GENERATE_LISTING', output: JSON.parse(text), confidenceScore: 0.86, riskFlags: [], latencyMs: Date.now()-started };
   }
 
