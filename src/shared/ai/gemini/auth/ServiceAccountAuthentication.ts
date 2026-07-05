@@ -1,46 +1,49 @@
 import fs from 'node:fs';
-import { GoogleAuth } from 'google-auth-library';
 import { GeminiAuthConfig } from '../config/geminiAuthConfig';
 import { GeminiAuthProvider, GeminiAccessToken, GeminiCredentialHealth } from './GeminiAuthTypes';
+import { OAuthTokenProvider } from './OAuthTokenProvider';
+import { CredentialRotation } from './CredentialRotation';
 
 export class ServiceAccountAuthentication implements GeminiAuthProvider {
   readonly mode: GeminiAccessToken['authMode'] = 'SERVICE_ACCOUNT';
-  private auth?: GoogleAuth;
+  private readonly tokenProvider: OAuthTokenProvider;
 
-  constructor(private readonly config: GeminiAuthConfig) {}
+  constructor(private readonly config: GeminiAuthConfig) {
+    this.tokenProvider = new OAuthTokenProvider(config);
+  }
 
   canUse(): boolean {
     return Boolean(this.config.GOOGLE_APPLICATION_CREDENTIALS && fs.existsSync(this.config.GOOGLE_APPLICATION_CREDENTIALS));
   }
 
-  private getAuth(): GoogleAuth {
-    if (!this.auth) {
-      this.auth = new GoogleAuth({
-        keyFile: this.config.GOOGLE_APPLICATION_CREDENTIALS,
-        scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-      });
-    }
-    return this.auth;
-  }
-
   async getToken(): Promise<GeminiAccessToken> {
-    const client = await this.getAuth().getClient();
-    const token = await client.getAccessToken();
-    const projectId = this.config.GOOGLE_CLOUD_PROJECT || await this.getAuth().getProjectId().catch(() => undefined);
-    const key = JSON.parse(fs.readFileSync(this.config.GOOGLE_APPLICATION_CREDENTIALS!, 'utf8'));
+    const token = await this.tokenProvider.getToken();
     return {
-      accessToken: token.token || undefined,
+      accessToken: token.accessToken,
+      expiresAt: token.expiresAt,
       authMode: this.mode,
-      projectId,
+      projectId: token.projectId,
       location: this.config.GOOGLE_CLOUD_LOCATION,
-      principal: key.client_email,
+      principal: token.principal,
     };
   }
 
   async healthCheck(): Promise<GeminiCredentialHealth> {
     try {
+      if (!this.canUse()) {
+        return { healthy: false, mode: this.mode, reason: 'GOOGLE_APPLICATION_CREDENTIALS missing or file does not exist', checkedAt: new Date().toISOString() };
+      }
+      const secure = CredentialRotation.assertSecureFile(this.config.GOOGLE_APPLICATION_CREDENTIALS!);
       const token = await this.getToken();
-      return { healthy: Boolean(token.accessToken), mode: this.mode, principal: token.principal, projectId: token.projectId, checkedAt: new Date().toISOString() };
+      return {
+        healthy: Boolean(token.accessToken),
+        mode: this.mode,
+        principal: token.principal,
+        projectId: token.projectId,
+        reason: secure.ok ? undefined : secure.reason,
+        checkedAt: new Date().toISOString(),
+        expiresAt: token.expiresAt?.toISOString(),
+      };
     } catch (e: any) {
       return { healthy: false, mode: this.mode, reason: e?.message ?? String(e), checkedAt: new Date().toISOString() };
     }
