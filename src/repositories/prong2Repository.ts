@@ -891,93 +891,85 @@ public async createMarketIntelRun(input: CreateMarketIntelRunInput): Promise<num
     input: QueueOpportunityIdempotentInput,
   ): Promise<boolean> {
     return this.withTransaction('queueOpportunityIdempotent', async (client) => {
-      const insertResult = await client.query(
-  `
-  insert into arb.opportunity_queue (
-    candidate_id,
-    watchlist_id,
-    match_score,
-    priority_score,
-    status,
-    reason_json,
-    created_at,
-    updated_at,
-    queued_at
-  )
-  select $1, $2, $3, $4, 'queued', $5::jsonb, now(), now(), now()
-    from arb.candidates c
-  join arb.listings l on l.id = c.listing_id
-  where c.id = $1
-    and (l.end_time is null or l.end_time > now())
-    and (
-      coalesce(c.identity_confidence, 0) >= 0.5
-      or ($2 is null and coalesce(c.current_price, 0) + coalesce(c.inbound_shipping_usd, 0) <= 100)
-    )
-  on conflict do nothing
-  returning id
-  `,
-  [
-    input.candidate.candidateId,
-    input.watchlistId,
-    input.matchScore,
-    input.priorityScore,
-    stringifyJson(input.reasonJson),
-  ],
-);
+      const candidateId = input.candidate.candidateId;
 
-      if ((insertResult.rowCount ?? 0) === 1) {
-        const updateResult = await client.query(
-          `
-          update arb.candidates
-          set status = 'queued',
-              matched_watchlist_id = $2,
-              matched_at = now(),
-              claim_expires_at = null,
-              updated_at = now()
-          where id = $1
-            and claim_token = $3::uuid
-          `,
-          [
-            input.candidate.candidateId,
-            input.watchlistId,
-            input.candidate.claimToken,
-          ],
-        );
+      const opportunityResult = await client.query(
+        `
+        insert into arb.opportunity_queue (
+          candidate_id, watchlist_id, match_score, priority_score, status, reason_json, created_at, updated_at, queued_at
+        )
+        select c.id, $2, $3, $4, 'queued', $5::jsonb, now(), now(), now()
+        from arb.candidates c
+        join arb.listings l on l.id = c.listing_id
+        where c.id = $1
+          and c.status not in ('buy', 'profit_pass', 'profit_blocked', 'rejected', 'purchased')
+          and (l.end_time is null or l.end_time > now())
+        on conflict do nothing
+        returning id
+        `,
+        [candidateId, input.watchlistId, input.matchScore, input.priorityScore, stringifyJson(input.reasonJson)],
+      );
 
-        assertSingleRowUpdated(
-          updateResult,
-          'queueOpportunityIdempotent',
-          `candidate claim token mismatch for queued candidate id=${input.candidate.candidateId}`,
-        );
-
-        return true;
-      }
-
-      const matchedResult = await client.query(
+      await client.query(
         `
         update arb.candidates
-        set status = 'matched',
-            matched_watchlist_id = $2,
-            matched_at = now(),
-            claim_expires_at = null,
-            updated_at = now()
+        set
+          status = 'queued',
+          lifecycle_status = case
+            when lifecycle_status in ('SEEDED', 'MATCHED', 'RECOVERED_NEEDS_EBAY_SEARCH') then 'QUEUED_FOR_EBAY_SEARCH'
+            else lifecycle_status
+          end,
+          matched_watchlist_id = $2,
+          matched_at = coalesce(matched_at, now()),
+          queued_at = coalesce(queued_at, now()),
+          claim_expires_at = null,
+          rejection_reason_code = null,
+          rejection_reason_detail = null,
+          review_required = false,
+          updated_at = now()
         where id = $1
-          and claim_token = $3::uuid
+          and status not in ('buy', 'profit_pass', 'profit_blocked', 'rejected', 'purchased')
         `,
-        [
-          input.candidate.candidateId,
-          input.watchlistId,
-          input.candidate.claimToken,
-        ],
+        [candidateId, input.watchlistId],
       );
 
-      assertSingleRowUpdated(
-        matchedResult,
-        'queueOpportunityIdempotent',
-        `candidate claim token mismatch for matched candidate id=${input.candidate.candidateId}`,
+      await client.query(
+        `
+        insert into arb.ebay_search_jobs (
+          candidate_id, job_type, status, api_source, run_context, search_plan_json, request_meta_json,
+          priority, correlation_id, analysis_prong, identity_gate_passed, identity_gate_reason_json, created_at, updated_at
+        )
+        select
+          c.id, 'candidate_comp', 'queued', 'browse', 'opportunity_queue',
+          jsonb_build_array(jsonb_build_object(
+            'query', coalesce(nullif(c.normalized_title, ''), c.title),
+            'title', c.title, 'brand', c.brand, 'model', c.model, 'mpn', c.mpn, 'condition', c.condition_text
+          )),
+          jsonb_build_object(
+            'source', 'queueOpportunityIdempotent', 'listing_id', c.listing_id, 'watchlist_id', $2,
+            'match_score', $3, 'priority_score', $4,
+            'guarantee', 'every_queued_candidate_gets_candidate_comp_search'
+          ),
+          greatest(1, least(100, round(100 - ($4 * 100))::int)),
+          gen_random_uuid(), 'PRONG2', true,
+          jsonb_build_array(jsonb_build_object(
+            'reason', 'candidate_must_receive_ebay_comp_search',
+            'gate', 'watchlist_is_priority_signal_not_eligibility_gate'
+          )),
+          now(), now()
+        from arb.candidates c
+        join arb.listings l on l.id = c.listing_id
+        where c.id = $1
+          and c.status not in ('buy', 'profit_pass', 'profit_blocked', 'rejected', 'purchased')
+          and (l.end_time is null or l.end_time > now())
+        on conflict (candidate_id, job_type)
+          where (job_type = 'candidate_comp' and status in ('queued', 'running', 'retry_scheduled'))
+        do nothing
+        `,
+        [candidateId, input.watchlistId, input.matchScore, input.priorityScore],
       );
 
-      return false;
+      return (opportunityResult.rowCount ?? 0) === 1;
     });
   }
 
