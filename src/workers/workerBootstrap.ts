@@ -8,16 +8,19 @@ import { finalizeProcessRunWorker } from './finalizeProcessRunWorker';
 import { candidateOpportunityWorker } from './candidateOpportunityWorker';
 import { marketIntelForensicWorker } from './marketIntelForensicWorker';
 import { certificationWorker } from './certificationWorker';
+import { shippingCaptureSignalRelayWorker } from './shippingCaptureSignalRelayWorker';
 
 type ManagedWorker = {
   name: string;
-  instance: any; _unused?: {
+  instance: any;
+  _unused?: {
     close: () => Promise<void>;
     on?: (event: string, handler: (...args: any[]) => void) => void;
   };
 };
 
 const managedWorkers: ManagedWorker[] = [
+  { name: 'shippingCaptureSignalRelayWorker', instance: shippingCaptureSignalRelayWorker },
   { name: 'captureListingEvidenceWorker', instance: captureListingEvidenceWorker },
   { name: 'captureShippingEvidenceWorker', instance: captureShippingEvidenceWorker },
   { name: 'capturePricingEvidenceWorker', instance: capturePricingEvidenceWorker },
@@ -25,58 +28,30 @@ const managedWorkers: ManagedWorker[] = [
   { name: 'finalizeProcessRunWorker', instance: finalizeProcessRunWorker },
   { name: 'candidateOpportunityWorker', instance: candidateOpportunityWorker },
   { name: 'marketIntelForensicWorker', instance: marketIntelForensicWorker },
-  { name: 'certificationWorker', instance: certificationWorker }
+  { name: 'certificationWorker', instance: certificationWorker },
 ];
 
 let shuttingDown = false;
 
 function wireWorkerEvents(worker: ManagedWorker) {
   if (!worker.instance.on) return;
-
   worker.instance.on('ready', () => {
     logger.info({ worker: worker.name }, 'worker ready');
   });
-
   worker.instance.on('active', (job: any) => {
-    logger.info(
-      { worker: worker.name, jobId: job?.id ?? null },
-      'worker job active'
-    );
+    logger.info({ worker: worker.name, jobId: job?.id ?? null }, 'worker job active');
   });
-
   worker.instance.on('completed', (job: any) => {
-    logger.info(
-      { worker: worker.name, jobId: job?.id ?? null },
-      'worker job completed'
-    );
+    logger.info({ worker: worker.name, jobId: job?.id ?? null }, 'worker job completed');
   });
-
   worker.instance.on('failed', (job: any, err: Error) => {
-    logger.error(
-      {
-        worker: worker.name,
-        jobId: job?.id ?? null,
-        err
-      },
-      'worker job failed'
-    );
+    logger.error({ worker: worker.name, jobId: job?.id ?? null, err }, 'worker job failed');
   });
-
   worker.instance.on('error', (err: Error) => {
-    logger.error(
-      {
-        worker: worker.name,
-        err
-      },
-      'worker error'
-    );
+    logger.error({ worker: worker.name, err }, 'worker error');
   });
-
   worker.instance.on('stalled', (jobId: string) => {
-    logger.warn(
-      { worker: worker.name, jobId },
-      'worker job stalled'
-    );
+    logger.warn({ worker: worker.name, jobId }, 'worker job stalled');
   });
 }
 
@@ -122,26 +97,14 @@ async function main() {
     wireWorkerEvents(worker);
   }
 
-  logger.info(
-    {
-      workers: managedWorkers.map((w) => w.name)
-    },
-    'worker bootstrap started'
-  );
+  logger.info({ workers: managedWorkers.map((w) => w.name) }, 'worker bootstrap started');
 
-  process.on('SIGINT', () => {
-    void gracefulShutdown('SIGINT');
-  });
-
-  process.on('SIGTERM', () => {
-    void gracefulShutdown('SIGTERM');
-  });
-
+  process.on('SIGINT', () => void gracefulShutdown('SIGINT'));
+  process.on('SIGTERM', () => void gracefulShutdown('SIGTERM'));
   process.on('uncaughtException', (err) => {
     logger.error({ err }, 'uncaught exception in worker bootstrap');
     void gracefulShutdown('uncaughtException');
   });
-
   process.on('unhandledRejection', (reason) => {
     logger.error({ err: reason }, 'unhandled rejection in worker bootstrap');
     void gracefulShutdown('unhandledRejection');

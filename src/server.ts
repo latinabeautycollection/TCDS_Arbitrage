@@ -17,6 +17,8 @@ import { createCapitalAllocationHealthRouter } from './routes/capitalAllocationH
 import { buildFedExRoutes } from './domains/shipping/routes/fedexRoutes';
 import { buildUspsRoutes } from './domains/shipping/routes/uspsRoutes';
 import { buildShipEngineRoutes } from './domains/shipping/routes/shipEngineRoutes';
+import listingRoutes from './domains/listing/routes/listingRoutes';
+import { enterpriseListingRoutes } from './domains/listing/routes/enterpriseListingRoutes';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -160,9 +162,14 @@ function mountApiRoutes(input: {
   // ------------------------------------------------------------------------
   app.use('/acquisition', createAcquisitionDecisionHealthRouter({ pool }));
   app.use('/capital-allocation', createCapitalAllocationHealthRouter({ pool }));
-  app.use(buildFedExRoutes(pool));
-  app.use(buildUspsRoutes(pool));
-  app.use(buildShipEngineRoutes(pool));
+  const safeMount = (label: string, fn: () => void) => {
+    try { fn(); } catch (err) { logger.error(`carrier route mount [${label}] failed; skipping: ${err instanceof Error ? err.message : String(err)}`); }
+  };
+  safeMount('fedex', () => app.use(buildFedExRoutes(pool)));
+  safeMount('usps', () => app.use(buildUspsRoutes(pool)));
+  safeMount('shipengine', () => app.use(buildShipEngineRoutes(pool)));
+  app.use('/domain4/listing', listingRoutes);
+  app.use('/domain4/listing', enterpriseListingRoutes);
   // --------------------------------------------------------------------------
   // Prong 2 — Namespaced worker/readiness/metrics surfaces
   // Must remain mounted under /prong2 so root health endpoints do not collide

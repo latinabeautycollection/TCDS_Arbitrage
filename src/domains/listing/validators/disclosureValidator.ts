@@ -1,0 +1,1 @@
+export function validateDisclosures(disclosures:string[], conditionText:string): string[] { const e:string[]=[]; if(/untested|as-is|parts/i.test(conditionText) && !disclosures.length) e.push('HIGH_RISK_CONDITION_WITHOUT_DISCLOSURE'); return e; }
