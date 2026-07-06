@@ -1,6 +1,4 @@
 
-import test from 'node:test';
-import assert from 'node:assert/strict';
 import { comparePropertyRoomToEbay } from '../services/ebayIdentity';
 
 test('identity gate passes on brand+mpn+category agreement', () => {
@@ -68,9 +66,9 @@ test('identity gate passes on brand+mpn+category agreement', () => {
     },
   );
 
-  assert.equal(result.gatePassed, true);
-  assert.ok(result.identityScore >= 0.9);
-  assert.ok(result.overallScore >= 0.8);
+  expect(result.gatePassed).toBe(true);
+  expect(result.identityScore >= 0.9).toBe(true);
+  expect(result.overallScore >= 0.8).toBe(true);
 });
 
 test('identity gate fails on category+identity mismatch', () => {
@@ -127,6 +125,6 @@ test('identity gate fails on category+identity mismatch', () => {
     null,
   );
 
-  assert.equal(result.gatePassed, false);
-  assert.ok(result.gateReasons.length > 0);
+  expect(result.gatePassed).toBe(false);
+  expect(result.gateReasons.length > 0).toBe(true);
 });
