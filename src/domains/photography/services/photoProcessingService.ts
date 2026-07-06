@@ -20,7 +20,7 @@ export class PhotoProcessingService {
       for (const input of inputs) {
         const original = await this.loadInput(input); const originalStore = await this.storage.store(original, 'original');
         await this.ledger.addForensicEvent({ processRunId, entityType:'photo', entityPk: originalStore.sha256, eventType:'PHOTO_ORIGINAL_CAPTURED', actionType:'CAPTURE', evidence:{ originalUri: originalStore.uri, sourceUrl: input.sourceUrl, sha256: originalStore.sha256 }, sourceTable:'arb.product_photo_assets' });
-        const corrected = await this.exposure.correct(original); const bg = await this.background.process(corrected.buffer, 'local');
+        const corrected = await this.exposure.correct(original); const bg = await this.background.process(corrected.buffer, 'photoroom');
         const processedStore = await this.storage.store(bg.buffer, 'processed'); const thumb = await this.storage.thumbnail(bg.buffer); const thumbStore = await this.storage.store(thumb, 'thumbnail');
         const scored = await this.scorer.score(original, bg.buffer, ctx, perceptualHashes); perceptualHashes.push(scored.metadata.perceptualHash);
         scored.originalUri = originalStore.uri; scored.processedUri = processedStore.uri; scored.thumbnailUri = thumbStore.uri; scored.transformationChain = [{op:'original_preserved', sha256:originalStore.sha256}, ...(corrected.changed ? [{op: corrected.operation, scoreBefore: corrected.scoreBefore, scoreAfter: corrected.scoreAfter}] : []), ...bg.chain, {op:'thumbnail', provider:'local_sharp'}];
