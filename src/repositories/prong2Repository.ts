@@ -946,11 +946,11 @@ public async createMarketIntelRun(input: CreateMarketIntelRunInput): Promise<num
             'title', c.title, 'brand', c.brand, 'model', c.model, 'mpn', c.mpn, 'condition', c.condition_text
           )),
           jsonb_build_object(
-            'source', 'queueOpportunityIdempotent', 'listing_id', c.listing_id, 'watchlist_id', $2,
-            'match_score', $3, 'priority_score', $4,
+            'source', 'queueOpportunityIdempotent', 'listing_id', c.listing_id, 'watchlist_id', $2::bigint,
+            'match_score', $3::numeric, 'priority_score', $4::numeric,
             'guarantee', 'every_queued_candidate_gets_candidate_comp_search'
           ),
-          greatest(1, least(100, round(100 - ($4 * 100))::int)),
+          greatest(1, least(100, round(100 - ($4::numeric * 100))::int)),
           gen_random_uuid(), 'PRONG2', true,
           jsonb_build_array(jsonb_build_object(
             'reason', 'candidate_must_receive_ebay_comp_search',
