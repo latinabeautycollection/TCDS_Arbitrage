@@ -738,6 +738,7 @@ async function main(): Promise<void> {
 
   const pool = new Pool({
     connectionString: databaseUrl,
+    ssl: { rejectUnauthorized: false },
     max: Number(process.env.PROFIT_ANALYSIS_DB_POOL_MAX ?? 5),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
