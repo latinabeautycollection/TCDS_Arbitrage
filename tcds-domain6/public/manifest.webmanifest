@@ -1,0 +1,19 @@
+{
+  "name": "TCDS Warehouse Execution",
+  "short_name": "TCDS WH",
+  "description": "Domain 6 Warehouse Execution PWA Shell",
+  "start_url": "/dashboard",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F7F6F2",
+  "theme_color": "#050505",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
