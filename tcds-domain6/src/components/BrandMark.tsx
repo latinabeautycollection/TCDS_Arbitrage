@@ -2,18 +2,14 @@ import { brand } from '../config/brand';
 
 export function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center justify-center gap-3">
+    <div className="flex items-center justify-center">
       <img
-        src="/tcds-logo.svg"
-        alt="TCDS"
-        className={`${compact ? 'h-11 w-11 rounded-2xl' : 'mx-auto h-24 w-24 rounded-[2rem]'} border border-tcds-gold/35 bg-tcds-black shadow-gold`}
+        src="/tcds-enterprise-logo.webp"
+        alt={`${brand.legalName} logo`}
+        className={compact
+          ? 'h-11 w-[9.75rem] rounded-xl border border-tcds-gold/25 bg-tcds-black object-cover object-center shadow-soft'
+          : 'mx-auto h-auto w-[18rem] max-w-full rounded-[1.35rem] border border-tcds-gold/30 bg-tcds-black object-cover shadow-gold'}
       />
-      {compact && (
-        <div className="leading-tight">
-          <p className="font-display text-xl font-black tracking-tight text-tcds-ink">{brand.company}</p>
-          <p className="text-[9px] font-black uppercase tracking-[0.22em] text-tcds-gold">Warehouse</p>
-        </div>
-      )}
     </div>
   );
 }
