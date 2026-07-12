@@ -54,11 +54,11 @@ export function Photos() {
 }
 
 export function Verify() {
-  return <Shell title="Verify Item" subtitle="Confirm auto-populated item details" primary="Confirm Item" bullets={['Read-only identity and source fields', 'Editable condition, missing accessories, and notes only', 'No acquisition cost or marketplace pricing shown', 'Confirm creates verification audit event', 'Exception creates supervisor task']} visual="inventory" secondaryPattern={<ErrorState title="Verification exception" message="If title, serial, or condition does not match evidence, route to exception queue instead of forcing completion." />} />;
+  return <Shell title="Verify Item" subtitle="Confirm auto-populated item details" primary="Confirm & Assign Storage" bullets={['Read-only identity and source fields', 'Editable condition, missing accessories, and notes only', 'No acquisition cost or marketplace pricing shown', 'Confirm creates verification audit event', 'Exception creates supervisor task']} visual="inventory" secondaryPattern={<ErrorState title="Verification exception" message="If title, serial, or condition does not match evidence, route to exception queue instead of forcing completion." />} />;
 }
 
 export function Storage() {
-  return <Shell title="Assign Storage" subtitle="Select warehouse zone and bin" primary="Assign Bin" bullets={['A01 Electronics', 'A02 Automotive', 'A03 Garden', 'A04 Musical', 'A05 General', 'A06 Overflow', 'Show available spaces, not percentages']} visual="storage" secondaryPattern={<SuccessToastPreview message="Item received → inventory created → return to Dashboard" />} />;
+  return <Shell title="Assign Storage" subtitle="Select warehouse zone and bin" primary="Assign Storage Bin" bullets={['A01 Electronics', 'A02 Automotive', 'A03 Garden', 'A04 Musical', 'A05 General', 'A06 Overflow', 'Show available spaces, not percentages']} visual="storage" secondaryPattern={<SuccessToastPreview message="Item received → inventory created → return to Dashboard" />} />;
 }
 
 export function Inventory() {
@@ -66,7 +66,7 @@ export function Inventory() {
 }
 
 export function InventoryDetail() {
-  return <Shell title="Inventory Detail" subtitle="Warehouse-only item record" primary="Queue for Listing" bullets={['Expandable sections: Item, Photos, Location, History, Actions', 'Move item uses bottom sheet, not a new page', 'Print barcode available here', 'Place hold available here', 'Queue Domain 4 without showing listing/pricing logic']} visual="inventory" secondaryPattern={<ActionSheetPreview title="Move Item" actions={['Scan new bin', 'Confirm new location', 'Create movement audit event']} />} />;
+  return <Shell title="Inventory Detail" subtitle="Warehouse-only item record" primary="Update Inventory" bullets={['Digital Twin ID prominently displayed', 'Expandable sections: Item, Photos, Location, History, Actions', 'Move item uses bottom sheet, not a new page', 'Print barcode available here', 'Place hold available here']} visual="inventory" secondaryPattern={<ActionSheetPreview title="Move Item" actions={['Scan new bin', 'Confirm new location', 'Create movement audit event']} />} />;
 }
 
 export function Pick() {
@@ -91,16 +91,16 @@ function Shell({ title, subtitle, primary, bullets, visual, secondaryPattern }: 
       <ScreenCard>
         <div className="mb-4 overflow-hidden rounded-[1.6rem] border border-tcds-line bg-tcds-black text-white shadow-soft">
           <div className="border-b border-white/10 p-4">
-            <p className="text-[10px] font-black uppercase tracking-[0.26em] text-tcds-gold">Approved Shell Screen</p>
-            <h2 className="mt-1 font-display text-2xl font-black tracking-tight">{title}</h2>
-            <p className="mt-1 text-sm text-white/60">Shell is motion-ready; business logic is intentionally deferred.</p>
+            <p className="text-caption font-black uppercase tracking-[0.26em] text-tcds-gold">TCDS Digital Workflow</p>
+            <h2 className="mt-1 font-display text-section font-black">{title}</h2>
+            <p className="mt-1 text-body text-white/60">Fortune 500 shell interaction pattern. Business logic remains intentionally deferred.</p>
           </div>
           <ShellVisual visual={visual} />
         </div>
         <PrimaryButton>{primary}</PrimaryButton>
       </ScreenCard>
       <ScreenCard>
-        <h3 className="mb-3 font-display font-black text-tcds-ink">Approved Shell Responsibilities</h3>
+        <h3 className="mb-3 font-display text-section font-black text-tcds-ink">Approved Shell Responsibilities</h3>
         <ul className="space-y-2 text-sm text-tcds-ink">
           {bullets.map((b) => <li key={b} className="flex items-center gap-2 rounded-xl bg-tcds-surface px-3 py-2 font-semibold"><CheckCircle2 size={16} className="text-tcds-green" /> {b}</li>)}
         </ul>
@@ -125,7 +125,7 @@ function ShellVisual({ visual }: { visual?: ShellProps['visual'] }) {
   if (visual === 'settings') {
     return <div className="space-y-3 p-4"><MiniRow label="Exceptions" value="1 Open" /><MiniRow label="Printer" value="Connected" /><MiniRow label="Sync" value="Healthy" /></div>;
   }
-  return <div className="grid place-items-center p-8"><PackageSearch className="text-tcds-gold" size={56} /></div>;
+  return <div className="space-y-3 p-4"><div className="rounded-enterprise bg-white/8 p-4"><p className="text-caption font-black uppercase tracking-[0.2em] text-tcds-gold">Digital Twin</p><p className="mt-1 font-display text-card font-black text-white">INV-2026-000184</p><div className="mt-3 grid grid-cols-3 gap-2 text-caption"><span className="rounded-xl bg-white/8 p-2 text-center">Active</span><span className="rounded-xl bg-white/8 p-2 text-center">A01-S02-B04</span><span className="rounded-xl bg-white/8 p-2 text-center">History</span></div></div><div className="grid place-items-center py-3"><PackageSearch className="text-tcds-gold" size={42} /></div></div>;
 }
 
 function MiniRow({ label, value }: { label: string; value: string }) {
