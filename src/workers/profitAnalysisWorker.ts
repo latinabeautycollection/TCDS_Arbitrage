@@ -17,6 +17,13 @@ const MODEL_VERSION = process.env.PROFIT_MODEL_VERSION ?? 'deterministic-profit-
 const BATCH_LIMIT = Number(process.env.PROFIT_ANALYSIS_BATCH_LIMIT ?? 50);
 const POLL_INTERVAL_MS = Number(process.env.PROFIT_ANALYSIS_POLL_INTERVAL_MS ?? 30000);
 const MIN_ACCEPTED_COMPS = Number(process.env.PROFIT_MIN_ACCEPTED_COMPS ?? 5);
+const ENABLE_MEDIAN_GATE = (process.env.PROFIT_ENABLE_MEDIAN_GATE ?? 'false') === 'true';
+const MEDIAN_DISCOUNT = Number(process.env.PROFIT_MEDIAN_DISCOUNT ?? 0.15);
+const DEMAND_MIN = Number(process.env.PROFIT_DEMAND_MIN ?? 3);
+const ACTIVATION_LOCK_RE = /activation[ _-]*lock|icloud[ _-]*lock/i;
+function isActivationLocked(title: string | null | undefined): boolean {
+  return ACTIVATION_LOCK_RE.test(title ?? '');
+}
 const BUY_MIN_NET_PROFIT = Number(process.env.PROFIT_BUY_MIN_NET_PROFIT ?? 20);
 const BUY_MIN_MARGIN = Number(process.env.PROFIT_BUY_MIN_MARGIN ?? 0.22);
 const BUY_MIN_ROI = Number(process.env.PROFIT_BUY_MIN_ROI ?? 0.35);
@@ -184,13 +191,14 @@ function buildRiskFlags(candidate: ProfitReadyCandidate, stats: PriceStats, conf
 
 function chooseDecision(input: {
   acceptedCompCount: number;
+  medianGateQualifies: boolean;
   estimatedNetProfitUsd: number;
   estimatedMarginPct: number;
   estimatedRoiPct: number;
   confidenceScore: number;
   riskFlags: string[];
 }): DecisionCode {
-  if (input.acceptedCompCount < MIN_ACCEPTED_COMPS) {
+  if (input.acceptedCompCount < MIN_ACCEPTED_COMPS && !input.medianGateQualifies) {
     return 'PASS_INSUFFICIENT_COMPS';
   }
 
@@ -268,7 +276,19 @@ function buildProfitAnalysis(
   const stats = calculatePriceStats(comps);
   const averageCompScore = calculateAverageCompScore(comps);
 
-  const recommendedSalePriceUsd = roundMoney(stats.median);
+  const marketMedian = candidate.medianActivePrice ?? null;
+  const demandSignal = candidate.activeCount ?? 0;
+  const medianGateQualifies =
+    ENABLE_MEDIAN_GATE &&
+    !isActivationLocked(candidate.title) &&
+    counts.accepted < MIN_ACCEPTED_COMPS &&
+    marketMedian !== null &&
+    marketMedian > 0 &&
+    demandSignal >= DEMAND_MIN;
+
+  const recommendedSalePriceUsd = medianGateQualifies
+    ? roundMoney(marketMedian * (1 - MEDIAN_DISCOUNT))
+    : roundMoney(stats.median);
   const propertyroomCostUsd = roundMoney(candidate.currentPrice);
   const inboundShippingUsd = roundMoney(candidate.inboundShippingUsd ?? 0);
   const outboundShippingEstimateUsd = roundMoney(estimateOutboundShipping(candidate));
@@ -310,6 +330,7 @@ function buildProfitAnalysis(
 
   const decisionCode = chooseDecision({
     acceptedCompCount: counts.accepted,
+    medianGateQualifies,
     estimatedNetProfitUsd,
     estimatedMarginPct,
     estimatedRoiPct,
@@ -467,9 +488,15 @@ async function processCandidate(
       const feeModel = await repository.getFeeModel(client);
 
       if (counts.accepted < MIN_ACCEPTED_COMPS) {
-        throw new Error(
-          `Candidate ${candidate.candidateId} no longer has enough accepted comps. accepted=${counts.accepted}`,
-        );
+        const marketMedianRecheck = candidate.medianActivePrice ?? null;
+        const demandRecheck = candidate.activeCount ?? 0;
+        const medianEligibleRecheck =
+          ENABLE_MEDIAN_GATE && !isActivationLocked(candidate.title) && marketMedianRecheck !== null && marketMedianRecheck > 0 && demandRecheck >= DEMAND_MIN;
+        if (!medianEligibleRecheck) {
+          throw new Error(
+            `Candidate ${candidate.candidateId} no longer has enough accepted comps. accepted=${counts.accepted}`,
+          );
+        }
       }
 
       const result = buildProfitAnalysis(candidate, comps, counts, feeModel);
@@ -656,7 +683,7 @@ async function runOnce(repository: ProfitAnalysisRepository): Promise<void> {
     },
   });
 
-const candidates = await repository.findProfitReadyCandidates(BATCH_LIMIT, RULESET_VERSION, MIN_ACCEPTED_COMPS);
+const candidates = await repository.findProfitReadyCandidates(BATCH_LIMIT, RULESET_VERSION, MIN_ACCEPTED_COMPS, ENABLE_MEDIAN_GATE ? DEMAND_MIN : 2000000000);
   let processed = 0;
   let failed = 0;
   let skippedLocked = 0;

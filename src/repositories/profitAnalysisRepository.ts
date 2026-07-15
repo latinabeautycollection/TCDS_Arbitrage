@@ -19,6 +19,8 @@ export interface ProfitReadyCandidate {
   isAccessory: boolean | null;
   isBundle: boolean | null;
   acceptedCompCount: number;
+  medianActivePrice: number | null;
+  activeCount: number | null;
 }
 
 export interface AcceptedComp {
@@ -324,6 +326,7 @@ export class ProfitAnalysisRepository {
     limit: number,
     rulesetVersion: string,
    minAcceptedComps: number,
+    demandMin: number,
   ): Promise<ProfitReadyCandidate[]> {
     const result = await this.pool.query<{
       candidate_id: string;
@@ -336,6 +339,8 @@ export class ProfitAnalysisRepository {
       is_accessory: boolean | null;
       is_bundle: boolean | null;
       accepted_comp_count: string;
+      median_active_price: string | null;
+      active_count: string | null;
     }>(
       `
         SELECT
@@ -348,7 +353,9 @@ export class ProfitAnalysisRepository {
           c.identity_confidence,
           c.is_accessory,
           c.is_bundle,
-          COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') AS accepted_comp_count
+          COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') AS accepted_comp_count,
+          m.median_active_price,
+          m.active_count
         FROM arb.candidates c
         JOIN arb.ebay_comps ec
           ON ec.candidate_id = c.id
@@ -359,6 +366,7 @@ export class ProfitAnalysisRepository {
   ORDER BY analysis_version DESC
   LIMIT 1
 ) pa ON true
+        LEFT JOIN arb.ebay_market m ON m.listing_id = c.listing_id
         WHERE c.current_price IS NOT NULL
           AND c.current_price >= 0
         GROUP BY
@@ -376,8 +384,12 @@ export class ProfitAnalysisRepository {
           pa.ruleset_version,
           pa.updated_at,
           pa.propertyroom_cost_usd,
-          pa.inbound_shipping_usd
-HAVING COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') >= $3
+          pa.inbound_shipping_usd,
+          m.median_active_price,
+          m.active_count
+HAVING (COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') >= $3
+            OR (m.median_active_price IS NOT NULL AND COALESCE(m.active_count, 0) >= $4
+                AND c.title !~* 'activation[ _-]*lock|icloud[ _-]*lock'))
           AND (
             pa.id IS NULL
             OR pa.accepted_comp_count <> COUNT(ec.id) FILTER (WHERE ec.status = 'accepted')
@@ -392,7 +404,7 @@ HAVING COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') >= $3
           c.id ASC
         LIMIT $1
       `,
-      [limit, rulesetVersion, minAcceptedComps],
+      [limit, rulesetVersion, minAcceptedComps, demandMin],
     );
 
     return result.rows.map((row) => ({
@@ -409,6 +421,8 @@ HAVING COUNT(ec.id) FILTER (WHERE ec.status = 'accepted') >= $3
       isAccessory: row.is_accessory,
       isBundle: row.is_bundle,
       acceptedCompCount: Number(row.accepted_comp_count),
+      medianActivePrice: row.median_active_price === null ? null : Number(row.median_active_price),
+      activeCount: row.active_count === null ? null : Number(row.active_count),
     }));
   }
 
