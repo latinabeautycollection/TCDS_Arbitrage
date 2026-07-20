@@ -1,0 +1,1 @@
+export interface OperatingCalendarGateway { isBusinessDay(date:Date,postalCode:string):Promise<boolean>; nextBusinessDay(date:Date,postalCode:string):Promise<Date>; carrierPickupCutoff(input:{carrierCode:string;serviceCode:string;postalCode:string;date:Date;}):Promise<Date|undefined>; }

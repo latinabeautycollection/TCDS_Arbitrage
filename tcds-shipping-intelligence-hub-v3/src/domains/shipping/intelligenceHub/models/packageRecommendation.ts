@@ -1,0 +1,2 @@
+export interface PackagingCandidate { packagingCode:string; materialCostCents:number; lengthIn:number; widthIn:number; heightIn:number; tareWeightOz:number; protectionScore:number; availableQuantity?:number; }
+export interface PackageRecommendation { packagingCode:string; estimatedPackedWeightOz:number; dimensionalWeightLb:number; materialCostCents:number; expectedDamageRisk:number; expectedCarrierCostCents?:number; score:number; reasonCodes:string[]; }
