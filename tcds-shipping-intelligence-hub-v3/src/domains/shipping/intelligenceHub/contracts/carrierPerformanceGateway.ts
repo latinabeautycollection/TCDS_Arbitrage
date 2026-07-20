@@ -1,0 +1,2 @@
+export interface CarrierLaneMetrics { carrierCode:string; serviceCode:string; originRegion:string; destinationRegion:string; packageClass:string; sampleSize:number; onTimeRate:number; exceptionRate:number; claimRate:number; invoiceAdjustmentRate:number; avgAdjustmentCents:number; trackingCompletenessRate:number; updatedAt:Date; }
+export interface CarrierPerformanceGateway { getLaneMetrics(input:{carrierCode?:string;serviceCode?:string;originPostalCode:string;destinationPostalCode:string;packageClass:string;}):Promise<CarrierLaneMetrics[]>; }
