@@ -1,0 +1,5 @@
+import { CheckCircle2, Clock3, XCircle } from 'lucide-react';
+import type { CompletionGate } from '../types/packShipTypes';
+export function CompletionGateCard({ gates, onGateSelect }: { gates: CompletionGate[]; onGateSelect?: (gate: CompletionGate) => void }) {
+  return <div className="space-y-2">{gates.map((gate) => <button type="button" onClick={() => onGateSelect?.(gate)} key={gate.code} className="flex w-full items-start gap-3 rounded-2xl bg-tcds-surface p-3 text-left focus:outline-none focus:ring-2 focus:ring-tcds-gold"><span aria-hidden="true">{gate.state === 'PASS' ? <CheckCircle2 className="mt-0.5 text-tcds-green" size={18}/> : gate.state === 'FAIL' ? <XCircle className="mt-0.5 text-tcds-red" size={18}/> : <Clock3 className="mt-0.5 text-tcds-warning" size={18}/>}</span><div><p className="text-sm font-black text-tcds-ink">{gate.label}</p>{gate.detail && <p className="text-xs text-tcds-muted">{gate.detail}</p>}<p className="mt-1 text-[10px] font-black uppercase tracking-[.12em] text-tcds-muted">{gate.state}{gate.state !== 'PASS' && onGateSelect ? ' · Tap to resolve' : ''}</p></div></button>)}</div>;
+}
