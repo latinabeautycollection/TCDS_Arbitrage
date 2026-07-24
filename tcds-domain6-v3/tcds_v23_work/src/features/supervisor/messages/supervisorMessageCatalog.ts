@@ -1,0 +1,40 @@
+import type { SupervisorMessage } from '../types/supervisorTypes';
+
+const catalog: Record<string, Omit<SupervisorMessage, 'supportReference'>> = {
+  SUP_EMERGENCY_STOP: { code: 'SUP_EMERGENCY_STOP', severity: 'EMERGENCY', blocking: true, retryable: false, title: 'Emergency warehouse stop', explanation: 'A safety, legal, or integrity event requires immediate containment of affected work.', nextStep: 'Stop the affected workflow, secure the item or area, and follow the emergency escalation procedure.', destination: 'EXCEPTIONS' },
+  SUP_CRITICAL_EXCEPTION: { code: 'SUP_CRITICAL_EXCEPTION', severity: 'CRITICAL', blocking: true, retryable: false, title: 'Critical warehouse exception', explanation: 'A critical issue is blocking one or more warehouse workflows.', nextStep: 'Open the exception, confirm containment, assign an owner, and begin the required investigation.', destination: 'EXCEPTIONS' },
+  SUP_MULTIPLE_BLOCKERS: { code: 'SUP_MULTIPLE_BLOCKERS', severity: 'ERROR', blocking: true, retryable: false, title: 'Multiple blocking issues require attention', explanation: 'Several unresolved controls are affecting warehouse execution.', nextStep: 'Resolve issues in safety, integrity, identity, authorization, evidence, and operational order.', destination: 'EXCEPTIONS' },
+  SUP_PACKAGE_MISSING_WATCH: { code: 'SUP_PACKAGE_MISSING_WATCH', severity: 'CRITICAL', blocking: true, retryable: false, title: 'Package movement is overdue', explanation: 'A package has not reached its expected workflow stage within the allowed time.', nextStep: 'Open Package Lifecycle, verify last custody, and launch a targeted search or discrepancy investigation.', destination: 'PACKAGES' },
+  SUP_SLA_BREACH: { code: 'SUP_SLA_BREACH', severity: 'ERROR', blocking: false, retryable: false, title: 'Workflow SLA breached', explanation: 'One or more work queues are operating beyond the approved service-level target.', nextStep: 'Review the SLA dashboard and rebalance work or open additional stations where permitted.', destination: 'SLA' },
+  SUP_BOTTLENECK_PREDICTED: { code: 'SUP_BOTTLENECK_PREDICTED', severity: 'WARNING', blocking: false, retryable: false, title: 'Bottleneck predicted', explanation: 'The intelligence engine predicts that a workflow queue will exceed capacity or SLA.', nextStep: 'Review the recommendation, expected impact, and required approval before changing operations.', destination: 'WORKFLOWS' },
+  SUP_CARRIER_CUTOFF_RISK: { code: 'SUP_CARRIER_CUTOFF_RISK', severity: 'ERROR', blocking: false, retryable: false, title: 'Carrier cutoff at risk', explanation: 'One or more packages may miss the scheduled carrier handoff.', nextStep: 'Prioritize packing and outbound staging or select an approved recovery plan.', destination: 'PACKAGES' },
+  SUP_PRINTER_SUPPLY_LOW: { code: 'SUP_PRINTER_SUPPLY_LOW', severity: 'WARNING', blocking: false, retryable: false, title: 'Printer supplies running low', explanation: 'The packing printer is predicted to exhaust labels or ribbon during the active shift.', nextStep: 'Replenish the approved supply before the predicted exhaustion time.', destination: 'DEVICES' },
+  SUP_DEVICE_FAILURE_PREDICTED: { code: 'SUP_DEVICE_FAILURE_PREDICTED', severity: 'WARNING', blocking: false, retryable: false, title: 'Device failure predicted', explanation: 'Device telemetry indicates increasing error rates or degraded performance.', nextStep: 'Inspect the device, move work if necessary, and schedule preventive service.', destination: 'DEVICES' },
+  SUP_POSTGRES_UNAVAILABLE: { code: 'SUP_POSTGRES_UNAVAILABLE', severity: 'CRITICAL', blocking: true, retryable: true, title: 'PostgreSQL is unavailable', explanation: 'Authoritative warehouse state cannot be confirmed.', nextStep: 'Stop sensitive approvals and mutations. Confirm database readiness before resuming operations.', destination: 'HEALTH' },
+  SUP_API_DEGRADED: { code: 'SUP_API_DEGRADED', severity: 'ERROR', blocking: true, retryable: true, title: 'Warehouse API is degraded', explanation: 'Warehouse mutations may be delayed or unavailable.', nextStep: 'Review service health and avoid duplicate actions while recovery is in progress.', destination: 'HEALTH' },
+  SUP_GATEWAY_OFFLINE: { code: 'SUP_GATEWAY_OFFLINE', severity: 'ERROR', blocking: true, retryable: true, title: 'Device Gateway is offline', explanation: 'Printer, scanner, or scale commands cannot be trusted.', nextStep: 'Check the Windows Gateway service and hardware connections before continuing device-dependent work.', destination: 'DEVICES' },
+  SUP_SYNC_FAILED: { code: 'SUP_SYNC_FAILED', severity: 'ERROR', blocking: true, retryable: true, title: 'Synchronization operation failed', explanation: 'A queued operation could not be committed safely.', nextStep: 'Inspect idempotency, entity state, and root cause before retrying.', destination: 'SYNC' },
+  SUP_DEAD_LETTER: { code: 'SUP_DEAD_LETTER', severity: 'CRITICAL', blocking: true, retryable: false, title: 'Dead-letter operation requires review', explanation: 'Automated retries were exhausted.', nextStep: 'Confirm the operation did not already commit before approving replay or containment.', destination: 'SYNC' },
+  SUP_OVERRIDE_PROHIBITED: { code: 'SUP_OVERRIDE_PROHIBITED', severity: 'CRITICAL', blocking: true, retryable: false, title: 'Override is prohibited', explanation: 'The requested decision conflicts with a non-overridable safety, legal, evidence, identity, or database-integrity control.', nextStep: 'Do not attempt another override. Contain the affected workflow and escalate according to policy.', destination: 'APPROVALS' },
+  SUP_APPROVAL_EVIDENCE_INCOMPLETE: { code: 'SUP_APPROVAL_EVIDENCE_INCOMPLETE', severity: 'ERROR', blocking: true, retryable: false, title: 'Approval evidence is incomplete', explanation: 'The requested decision does not have the required evidence or second-person confirmation.', nextStep: 'Request the missing evidence before making a decision.', destination: 'APPROVALS' },
+  SUP_SECURITY_ANOMALY: { code: 'SUP_SECURITY_ANOMALY', severity: 'CRITICAL', blocking: true, retryable: false, title: 'Security anomaly detected', explanation: 'The system detected suspicious access, repeated mismatches, or unusual override behavior.', nextStep: 'Review actor, device, station, source IP, request, and correlation evidence.', destination: 'SECURITY' },
+  SUP_SHIFT_HANDOFF_REQUIRED: { code: 'SUP_SHIFT_HANDOFF_REQUIRED', severity: 'WARNING', blocking: false, retryable: false, title: 'Shift handoff required', explanation: 'The current shift has unresolved work or critical context that must be transferred.', nextStep: 'Create the shift summary and require the incoming supervisor to acknowledge it.', destination: 'OPERATIONS' },
+  SUP_STALE_DATA: { code: 'SUP_STALE_DATA', severity: 'WARNING', blocking: true, retryable: true, title: 'Command-center data may be stale', explanation: 'The latest authoritative warehouse state could not be refreshed.', nextStep: 'Restore connectivity and refresh before approving, resolving, or reallocating work.', destination: 'HEALTH' },
+  SUP_ACTION_COMMITTED: { code: 'SUP_ACTION_COMMITTED', severity: 'INFO', blocking: false, retryable: false, title: 'Supervisor action recorded', explanation: 'The decision was committed with actor, device, request, and correlation evidence.', nextStep: 'Review the updated workflow state.', destination: 'OPERATIONS' }
+};
+
+export function supervisorMessage(code: string, supportReference?: string): SupervisorMessage {
+  const found = catalog[code] ?? {
+    code,
+    severity: 'ERROR' as const,
+    blocking: true,
+    retryable: false,
+    title: 'Warehouse condition requires review',
+    explanation: 'The system returned a condition that does not yet have a dedicated employee-facing message.',
+    nextStep: 'Do not bypass the control. Record the support reference and request manager or administrator review.',
+    destination: 'EXCEPTIONS' as const
+  };
+  return { ...found, supportReference };
+}
+
+export const supervisorMessageCodes = Object.keys(catalog);

@@ -1,0 +1,7 @@
+src/features/auth/components/AuthReadinessCard.tsx
+src/features/auth/components/LoginErrorBanner.tsx
+src/features/auth/context/AuthContext.tsx
+src/features/auth/routes/ProtectedRoute.tsx
+src/features/auth/services/authApi.ts
+src/features/auth/services/webauthnClient.ts
+src/features/auth/types/authTypes.ts
