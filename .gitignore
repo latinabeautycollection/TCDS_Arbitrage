@@ -49,3 +49,4 @@ ecosystem.comp.config.js
 *.bak
 *.bak.*
 *.bak-*
+._*
