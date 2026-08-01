@@ -1,0 +1,5 @@
+import type{Pool}from'pg';
+export class ArbProcessRepository{constructor(private readonly pool:Pool){}
+ async start(processName:string,stage:string,entityType:string,entityId:string,actorType:string,actorId:string,actorName:string|undefined,correlationId:string){const r=await this.pool.query("INSERT INTO arb.process_runs(process_name,process_stage,status,correlation_id,actor_type,actor_id,actor_name,entity_type,entity_count,details_json) VALUES($1,$2,'STARTED',$3,$4,$5,$6,$7,1,jsonb_build_object('entityId',$8)) RETURNING run_id",[processName,stage,correlationId,actorType,actorId,actorName??null,entityType,entityId]);return String(r.rows[0].run_id);}
+ async finish(runId:string,status:'SUCCEEDED'|'FAILED'|'PARTIAL',details:Record<string,unknown>,error?:string){await this.pool.query("UPDATE arb.process_runs SET status=$2,completed_at=CASE WHEN $2<>'FAILED' THEN clock_timestamp() ELSE completed_at END,failed_at=CASE WHEN $2='FAILED' THEN clock_timestamp() ELSE failed_at END,error_summary=$3,details_json=details_json||$4::jsonb,updated_at=clock_timestamp() WHERE run_id=$1",[runId,status,error??null,JSON.stringify(details)]);}
+}

@@ -42,7 +42,9 @@
     "capital:safety:grounding": "node dist/workers/prong2CompSetGroundingWorker.js",
     "capital:safety:validate": "node dist/scripts/validatePhase2GreenTier.js",
     "capital:safety:certify-replay": "node dist/scripts/certifyPhase2Replay.js",
-    "usps:smoke": "tsx src/scripts/usps-smoke-test.ts"
+    "usps:smoke": "tsx src/scripts/usps-smoke-test.ts",
+    "start:forensic-storage-worker": "node dist/workers/forensicStorageWorker.js",
+    "test:domain7a2": "jest src/domains/forensic/tests --runInBand"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.55.1",

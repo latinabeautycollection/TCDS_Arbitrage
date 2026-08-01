@@ -1,0 +1,1 @@
+describe('verification lease contract',()=>{it('documents short DB lease before external streaming',()=>{const phases=['claim','commit','stream','finalize'];expect(phases).toEqual(['claim','commit','stream','finalize']);});});

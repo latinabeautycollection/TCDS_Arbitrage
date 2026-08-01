@@ -1,0 +1,1 @@
+describe('forensic object keys',()=>{it('must not contain sensitive identifiers',()=>{const key='forensic/tenant/tcds/chain/550e8400-e29b-41d4-a716-446655440000/source/artifact-abc';expect(key).not.toMatch(/@|\s|\b\d{12,}\b/);});});

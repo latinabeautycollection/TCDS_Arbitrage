@@ -19,6 +19,11 @@ import { buildUspsRoutes } from './domains/shipping/routes/uspsRoutes';
 import { buildShipEngineRoutes } from './domains/shipping/routes/shipEngineRoutes';
 import listingRoutes from './domains/listing/routes/listingRoutes';
 import { enterpriseListingRoutes } from './domains/listing/routes/enterpriseListingRoutes';
+import { createForensicStorageRouter } from './domains/forensic/routes/forensicStorageRoutes';
+import { createForensicStorageQueue } from './domains/forensic/jobs/forensicStorageQueue';
+import { createWarehouseForensicModule } from './domains/forensic/warehouse/warehouseForensicModule';
+import { attachForensicPrincipal } from './domains/forensic/warehouse/auth/warehouseIdentityPrincipalAdapter';
+import { requireWarehouseAuthentication } from './domains/forensic/warehouse/auth/requireWarehouseAuthentication';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -168,6 +173,22 @@ function mountApiRoutes(input: {
   safeMount('fedex', () => app.use(buildFedExRoutes(pool)));
   safeMount('usps', () => app.use(buildUspsRoutes(pool)));
   safeMount('shipengine', () => app.use(buildShipEngineRoutes(pool)));
+  safeMount('domain7b-warehouse-forensic', () => {
+    const wf = createWarehouseForensicModule(pool);
+    app.use('/domain7/forensic/warehouse', requireWarehouseAuthentication, attachForensicPrincipal(pool), wf.router);
+  });
+  safeMount('domain7-forensic', () => {
+    const forensicQueue = createForensicStorageQueue({
+      host: env.REDIS_HOST,
+      port: env.REDIS_PORT,
+      password: env.REDIS_PASSWORD || undefined,
+      maxRetriesPerRequest: null,
+    });
+    app.use('/domain7/forensic', createForensicStorageRouter({
+      queue: forensicQueue,
+      health: async () => ({ ready: true, component: 'domain7-forensic-api' }),
+    }));
+  });
   app.use('/domain4/listing', listingRoutes);
   app.use('/domain4/listing', enterpriseListingRoutes);
   // --------------------------------------------------------------------------

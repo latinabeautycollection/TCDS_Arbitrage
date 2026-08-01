@@ -13,9 +13,20 @@
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "types": ["node"],
+    "types": [
+      "node"
+    ],
     "sourceMap": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["dist", "node_modules", "src/tests","src/forensic.bak/**"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules",
+    "src/tests",
+    "src/forensic.bak/**",
+    "src/domains/forensic/tests",
+    "src/domains/forensic/routes/forensicChainRoutes.ts"
+  ]
 }

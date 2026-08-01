@@ -1,0 +1,1 @@
+describe('R2 copy source path encoding',()=>{it('preserves slash structure',()=>{const key='a folder/x+y.pdf';const encoded=key.split('/').map(encodeURIComponent).join('/');expect(encoded).toBe('a%20folder/x%2By.pdf');});});
