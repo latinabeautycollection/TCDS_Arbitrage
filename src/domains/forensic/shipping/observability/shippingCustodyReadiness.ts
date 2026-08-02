@@ -1,0 +1,1 @@
+import type {Pool} from 'pg';export async function shippingCustodyReadiness(pool:Pool){const {rows}=await pool.query(`SELECT to_regprocedure('forensic.d7c1_evaluate_custody_gate(uuid,text,forensic.event_actor_type,text,uuid,uuid)') IS NOT NULL ready`);return rows[0];}

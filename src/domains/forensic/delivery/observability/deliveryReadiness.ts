@@ -1,0 +1,1 @@
+import type {Pool} from 'pg';export async function deliveryReadiness(pool:Pool){const {rows}=await pool.query(`SELECT to_regprocedure('forensic.d7c2_assess_delivery_defensibility(uuid,text,text)') IS NOT NULL ready`);return rows[0];}

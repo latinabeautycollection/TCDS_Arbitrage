@@ -26,7 +26,6 @@
     "node_modules",
     "src/tests",
     "src/forensic.bak/**",
-    "src/domains/forensic/tests",
-    "src/domains/forensic/routes/forensicChainRoutes.ts"
+    "src/domains/forensic/tests"
   ]
 }

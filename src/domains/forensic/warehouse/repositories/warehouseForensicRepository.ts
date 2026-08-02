@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import type { ForensicPrincipal } from '../../auth/forensicPrincipal';
+import { requireWarehousePrincipalContext, type ForensicPrincipal } from '../../auth/forensicPrincipal';
 import type {
   GateEvaluation,
   WarehouseEvidenceSession,
@@ -32,6 +32,7 @@ export class WarehouseForensicRepository {
     metadata?: Record<string, unknown>;
   }): Promise<WarehouseEvidenceSession> {
     const p = input.principal;
+    const w = requireWarehousePrincipalContext(p);
     const { rows } = await this.pool.query(
       `SELECT * FROM forensic.d7b_start_session(
         $1::uuid,$2,$3,$4,$5::uuid,$6::uuid,$7::uuid,$8::uuid,$9::uuid,
@@ -39,9 +40,9 @@ export class WarehouseForensicRepository {
         $15,$16::uuid,$17::uuid,$18::jsonb
       )`,
       [
-        input.chainId,p.tenantKey,input.workflowType,input.linkType,p.facilityId,
-        p.stationId ?? null,p.deviceId,p.warehouseDeviceSessionId,p.warehouseAuthSessionId,
-        p.warehouseUserId,p.warehouseEmployeeId,JSON.stringify(input.linkRefs),
+        input.chainId,p.tenantKey,input.workflowType,input.linkType,w.facilityId,
+        w.stationId ?? null,w.deviceId,w.warehouseDeviceSessionId,w.warehouseAuthSessionId,
+        w.warehouseUserId,w.warehouseEmployeeId,JSON.stringify(input.linkRefs),
         p.actorType,p.actorId,input.idempotencyKey,input.correlationId,
         input.processRunId,JSON.stringify(input.metadata ?? {}),
       ],
@@ -79,13 +80,14 @@ export class WarehouseForensicRepository {
     correlationId: string; processRunId: string; metadata?: Record<string, unknown>;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_link_accepted_artifact(
        $1::uuid,$2,$3::uuid,$4,$5,$6,$7,$8::uuid,$9,$10::uuid,
        $11::forensic.event_actor_type,$12,$13,$14::uuid,$15::uuid,$16::jsonb)`,
       [args.sessionId,p.tenantKey,args.artifactId,args.evidenceRole,
        args.sourceSchema??null,args.sourceTable??null,args.sourceRecordId??null,
-       args.warehouseMediaAssetId??null,args.sequenceNo,p.warehouseUserId,p.actorType,
+       args.warehouseMediaAssetId??null,args.sequenceNo,w.warehouseUserId,p.actorType,
        p.actorId,args.idempotencyKey,args.correlationId,args.processRunId,
        JSON.stringify(args.metadata??{})],
     );
@@ -99,6 +101,7 @@ export class WarehouseForensicRepository {
     correlationId:string; processRunId:string;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_record_condition_attestation(
        $1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8::text[],$9,$10::uuid[],
@@ -106,7 +109,7 @@ export class WarehouseForensicRepository {
        $16,$17::uuid,$18::uuid)`,
       [args.sessionId,p.tenantKey,args.itemId,args.inspectionId??null,
        args.conditionStage,args.conditionGrade??null,args.severity,args.defectCodes,
-       args.narrative,args.artifactLinkIds,p.warehouseUserId,p.deviceId,args.attestedAt,
+       args.narrative,args.artifactLinkIds,w.warehouseUserId,w.deviceId,args.attestedAt,
        p.actorType,p.actorId,args.idempotencyKey,args.correlationId,args.processRunId],
     );
     return rows[0];
@@ -119,12 +122,13 @@ export class WarehouseForensicRepository {
     metadata?:Record<string,unknown>;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_apply_tamper_seal(
        $1::uuid,$2,$3::uuid,$4::uuid,$5,$6,$7,$8::uuid,$9::uuid,$10::uuid,
        $11::timestamptz,$12::forensic.event_actor_type,$13,$14,$15::uuid,$16::uuid,$17::jsonb)`,
       [args.sessionId,p.tenantKey,args.packingTaskId,args.packageId,args.sealCodeHmac,
-       args.maskedSealCode,args.sealType,p.warehouseUserId,p.deviceId,
+       args.maskedSealCode,args.sealType,w.warehouseUserId,w.deviceId,
        args.artifactLinkId??null,args.occurredAt,p.actorType,p.actorId,
        args.idempotencyKey,args.correlationId,args.processRunId,
        JSON.stringify(args.metadata??{})],
@@ -138,12 +142,13 @@ export class WarehouseForensicRepository {
     processRunId:string;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_record_packing_attestation(
        $1::uuid,$2,$3::uuid,$4::uuid,$5::uuid,$6::uuid,$7::uuid,
        $8::forensic.event_actor_type,$9,$10,$11::uuid,$12::uuid)`,
       [args.sessionId,p.tenantKey,args.packingTaskId,args.packageId,args.itemId,
-       args.packingTaskItemId,p.warehouseUserId,p.actorType,p.actorId,
+       args.packingTaskItemId,w.warehouseUserId,p.actorType,p.actorId,
        args.idempotencyKey,args.correlationId,args.processRunId],
     );
     return rows[0];
@@ -155,12 +160,13 @@ export class WarehouseForensicRepository {
     idempotencyKey:string;correlationId:string;processRunId:string;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_record_supervisor_decision(
        $1::uuid,$2,$3,$4,$5::uuid,$6,$7::uuid,$8::uuid,
        $9::forensic.event_actor_type,$10,$11,$12::uuid,$13::uuid)`,
       [args.sessionId,p.tenantKey,args.decisionType,args.decision,
-       args.warehouseOverrideId??null,args.reason,p.warehouseUserId,
+       args.warehouseOverrideId??null,args.reason,w.warehouseUserId,
        args.supersedesDecisionId??null,p.actorType,p.actorId,args.idempotencyKey,
        args.correlationId,args.processRunId],
     );
@@ -172,6 +178,7 @@ export class WarehouseForensicRepository {
     idempotencyKey:string;correlationId:string;processRunId:string;
   }) {
     const p=args.principal;
+    const w=requireWarehousePrincipalContext(p);
     const {rows}=await this.pool.query(
       `SELECT * FROM forensic.d7b_set_continuity_exception(
        $1::uuid,$2,$3,$4::jsonb,$5::forensic.event_actor_type,$6,$7,$8::uuid,$9::uuid)`,

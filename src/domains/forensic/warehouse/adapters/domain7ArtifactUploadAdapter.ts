@@ -1,4 +1,4 @@
-import type { ForensicPrincipal } from '../../auth/forensicPrincipal';
+import { requireWarehousePrincipalContext, type ForensicPrincipal } from '../../auth/forensicPrincipal';
 
 export interface Domain7A2UploadService {
   issueUpload(input: {
@@ -29,16 +29,17 @@ export class Domain7ArtifactUploadAdapter {
     idempotencyKey: string;
     metadata?: Record<string, unknown>;
   }) {
+    const warehouse = requireWarehousePrincipalContext(principal);
     return this.uploadService.issueUpload({
       ...input,
       actorType: principal.actorType,
       actorId: principal.actorId,
       metadata: {
         ...input.metadata,
-        warehouseUserId: principal.warehouseUserId,
-        warehouseEmployeeId: principal.warehouseEmployeeId,
-        warehouseDeviceId: principal.deviceId,
-        warehouseStationId: principal.stationId,
+        warehouseUserId: warehouse.warehouseUserId,
+        warehouseEmployeeId: warehouse.warehouseEmployeeId,
+        warehouseDeviceId: warehouse.deviceId,
+        warehouseStationId: warehouse.stationId,
       },
     });
   }

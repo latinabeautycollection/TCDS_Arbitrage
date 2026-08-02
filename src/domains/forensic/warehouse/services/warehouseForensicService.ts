@@ -28,7 +28,7 @@ export class WarehouseForensicService {
     return {...session,evidence:await this.repository.listSessionEvidence(sessionId,principal.tenantKey)};
   }
 
-  async linkArtifact(principal:ForensicPrincipal,input:Parameters<WarehouseForensicRepository['linkArtifact']>[0],correlationId:string=randomUUID()){
+  async linkArtifact(principal:ForensicPrincipal,input:Omit<Parameters<WarehouseForensicRepository['linkArtifact']>[0],'principal'|'correlationId'|'processRunId'>,correlationId:string=randomUUID()){
     return this.run(principal,'D7B_RECEIVING_ATTEST','EVIDENCE_LINK',input.idempotencyKey,
       correlationId,runId=>this.repository.linkArtifact({...input,principal,correlationId,processRunId:runId}));
   }
@@ -97,7 +97,7 @@ export class WarehouseForensicService {
   }
 
   private require(principal:ForensicPrincipal,permission:string):void{
-    if(!principal.permissions.includes(permission)){
+    if(!principal.permissions.has(permission)){
       throw new WarehouseForensicError('FORBIDDEN','Forbidden',403);
     }
   }
