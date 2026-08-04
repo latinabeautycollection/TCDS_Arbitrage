@@ -28,6 +28,9 @@ import { createReturnAdjudicationModule } from './domains/forensic/returns/retur
 import { attachReturnPrincipal } from './domains/forensic/returns/auth/returnPrincipalAdapter';
 import { requireForensicAuthenticationSession } from './domains/forensic/auth/forensicAuthentication';
 import { attachCorrelationId } from './lib/http/correlationId';
+import { createClaimsModule } from './domains/forensic/claims/claimsModule';
+import { createRecoveryModule } from './domains/forensic/claims/recoveryModule';
+import { attachClaimsPrincipal } from './domains/forensic/claims/auth/claimsPrincipalAdapter';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -199,6 +202,17 @@ function mountApiRoutes(input: {
       attachReturnPrincipal(pool),
       returnIntake.router,
       returnAdjudication.router);
+  });
+  safeMount('domain7-claims', () => {
+    const claims = createClaimsModule(pool);
+    const recovery = createRecoveryModule(pool);
+    app.use('/domain7/forensic/claims',
+      requireForensicAuthenticationSession,
+      (req, res, next) => { (req as unknown as { warehouseAuthSessionId?: string }).warehouseAuthSessionId = res.locals.authSessionId; next(); },
+      attachCorrelationId,
+      attachClaimsPrincipal(pool),
+      claims.router,
+      recovery.router);
   });
   safeMount('domain7-forensic-unified', () => {
     const domain7Logger: ForensicLogger = {
