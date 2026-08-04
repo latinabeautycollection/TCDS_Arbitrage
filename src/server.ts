@@ -31,6 +31,10 @@ import { attachCorrelationId } from './lib/http/correlationId';
 import { createClaimsModule } from './domains/forensic/claims/claimsModule';
 import { createRecoveryModule } from './domains/forensic/claims/recoveryModule';
 import { attachClaimsPrincipal } from './domains/forensic/claims/auth/claimsPrincipalAdapter';
+import { createLegalHoldModule } from './domains/forensic/casefiles/legalHoldModule';
+import { attachCasefilePrincipal } from './domains/forensic/casefiles/auth/casefilePrincipalAdapter';
+import { createDossierModule } from './domains/forensic/casefiles/dossierModule';
+import { UnconfiguredDossierSigner } from './domains/forensic/casefiles/adapters/dossierSigningAdapter';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -213,6 +217,17 @@ function mountApiRoutes(input: {
       attachClaimsPrincipal(pool),
       claims.router,
       recovery.router);
+  });
+  safeMount('domain7-casefiles', () => {
+    const legalHold = createLegalHoldModule(pool);
+    const dossier = createDossierModule(pool, new UnconfiguredDossierSigner());
+    app.use('/domain7/forensic/casefiles',
+      requireForensicAuthenticationSession,
+      (req, res, next) => { (req as unknown as { warehouseAuthSessionId?: string }).warehouseAuthSessionId = res.locals.authSessionId; next(); },
+      attachCorrelationId,
+      attachCasefilePrincipal(pool),
+      legalHold.router,
+      dossier.router);
   });
   safeMount('domain7-forensic-unified', () => {
     const domain7Logger: ForensicLogger = {

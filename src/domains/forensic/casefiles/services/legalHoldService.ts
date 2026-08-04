@@ -1,0 +1,13 @@
+import{randomUUID}from'node:crypto';import type{AddHoldScopeInput,CasefilePrincipal,DecideHoldReleaseInput,OpenLegalHoldInput,RequestHoldReleaseInput}from'../models/casefileTypes';
+import{CasefileForensicError}from'../errors/CasefileForensicError';import{ArbProcessRunAdapter}from'../adapters/arbProcessRunAdapter';import{LegalHoldRepository}from'../repositories/legalHoldRepository';
+export class LegalHoldService{constructor(private readonly repo:LegalHoldRepository,private readonly runs:ArbProcessRunAdapter){}
+ private need(p:CasefilePrincipal,supervisor=false){const perm=supervisor?'forensic.hold.supervise':'forensic.hold.operate';if(!p.permissions.includes(perm))throw new CasefileForensicError('FORBIDDEN','Forbidden',403);if(supervisor&&p.assuranceLevel!=='AAL2')throw new CasefileForensicError('AAL2_REQUIRED','AAL2 required',403)}
+ private async exec<T>(p:CasefilePrincipal,name:string,key:string,c:string,a:(r:string)=>Promise<T>,supervisor=false){this.need(p,supervisor);const r=await this.runs.start({processName:name,principal:p,correlationId:c,idempotencyKey:key,entityType:'LEGAL_HOLD'});try{const x=await a(r);await this.runs.finish(r,'SUCCEEDED',{completed:true});return x}catch(e){await this.runs.finish(r,'FAILED',{},e);throw e}}
+ open(p:CasefilePrincipal,i:OpenLegalHoldInput,c:string=randomUUID()){return this.exec(p,'D7F1_HOLD_OPEN',i.idempotencyKey,c,r=>this.repo.open(p,i,r,c),true)}
+ addScope(p:CasefilePrincipal,i:AddHoldScopeInput,c:string=randomUUID()){return this.exec(p,'D7F1_HOLD_SCOPE',i.idempotencyKey,c,r=>this.repo.addScope(p,i,r,c))}
+ materialize(p:CasefilePrincipal,id:string,key:string,c:string=randomUUID()){return this.exec(p,'D7F1_HOLD_SCOPE',key,c,r=>this.repo.materialize(p,id,key,r,c))}
+ async verify(p:CasefilePrincipal,id:string,key:string,c:string=randomUUID()){this.need(p);const r=await this.runs.start({processName:'D7F1_PRESERVATION_VERIFY',principal:p,correlationId:c,idempotencyKey:key,entityType:'LEGAL_HOLD'});try{const x=await this.repo.verify(p,id,r,c);await this.runs.finish(r,x.result==='VERIFIED'?'SUCCEEDED':'PARTIAL',{result:x.result});return x}catch(e){await this.runs.finish(r,'FAILED',{},e);throw e}}
+ requestRelease(p:CasefilePrincipal,i:RequestHoldReleaseInput,c:string=randomUUID()){return this.exec(p,'D7F1_RELEASE_REQUEST',i.idempotencyKey,c,r=>this.repo.requestRelease(p,i,r,c),true)}
+ decideRelease(p:CasefilePrincipal,i:DecideHoldReleaseInput,c:string=randomUUID()){return this.exec(p,'D7F1_RELEASE_DECIDE',i.idempotencyKey,c,r=>this.repo.decideRelease(p,i,r,c),true)}
+ async get(p:CasefilePrincipal,id:string){this.need(p);const x=await this.repo.get(p,id);if(!x)throw new CasefileForensicError('NOT_FOUND','Legal hold not found',404);return x}
+}

@@ -1,0 +1,3 @@
+import type{SignResult}from'../models/casefileTypes';
+export interface DossierSigningAdapter{readonly provider:string;readonly keyReference:string;readonly keyVersion?:string;readonly algorithm:string;signDigest(payloadSha256:string):Promise<SignResult>;verifyDigest(payloadSha256:string,signatureBase64:string):Promise<boolean>}
+export class UnconfiguredDossierSigner implements DossierSigningAdapter{readonly provider='UNCONFIGURED';readonly keyReference='UNCONFIGURED';readonly algorithm='UNCONFIGURED';async signDigest():Promise<SignResult>{throw new Error('KMS/HSM signing adapter is not configured')}async verifyDigest():Promise<boolean>{return false}}
