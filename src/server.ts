@@ -42,6 +42,8 @@ import { UnconfiguredCertificateSigningAdapter } from './domains/forensic/assura
 import { createDomain7H1Module } from './domains/forensic/access/accessModule';
 import { createDomain7H2Module } from './domains/forensic/access/accessRiskModule';
 import { attachAccessPrincipal } from './domains/forensic/access/auth/accessPrincipalMiddleware';
+import { createCertificationModule as createIntegrationCertModule } from './domains/forensic/certification/integration/certificationModule';
+import { createOperationsModule } from './domains/forensic/operations/integration/operationsModule';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -255,6 +257,14 @@ function mountApiRoutes(input: {
       attachAccessPrincipal(pool),
       accessH1.router,
       accessH2.router);
+  });
+  safeMount('domain7-integration-certification', () => {
+    const cert = createIntegrationCertModule(pool);
+    app.use('/domain7/forensic/certification', requireForensicAuthenticationSession, attachAccessPrincipal(pool), cert.router);
+  });
+  safeMount('domain7-operations', () => {
+    const ops = createOperationsModule(pool);
+    app.use('/domain7/forensic/operations', requireForensicAuthenticationSession, attachAccessPrincipal(pool), ops.router);
   });
   safeMount('domain7-forensic-unified', () => {
     const domain7Logger: ForensicLogger = {
