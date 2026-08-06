@@ -417,7 +417,9 @@ module.exports = {
       error_file: '/srv/arb-system/api/logs/pm2/certification-worker-error.log',
       merge_logs: true,
       env: { NODE_ENV: 'production' },
-    }
+    },
+    { name:'access-expiry-worker', script:'./dist/workers/accessExpiryBootstrap.js', node_args:'-r dotenv/config', cwd:'/srv/arb-system/api', instances:1, exec_mode:'fork', autorestart:true, watch:false, time:true, kill_timeout:15000, max_memory_restart:'400M', min_uptime:'20s', max_restarts:20, restart_delay:5000, exp_backoff_restart_delay:200, out_file:'/srv/arb-system/api/logs/pm2/access-expiry-worker-out.log', error_file:'/srv/arb-system/api/logs/pm2/access-expiry-worker-error.log', merge_logs:true, env:{ NODE_ENV:'production' } },
+    { name:'access-risk-worker', script:'./dist/workers/accessRiskBootstrap.js', node_args:'-r dotenv/config', cwd:'/srv/arb-system/api', instances:1, exec_mode:'fork', autorestart:true, watch:false, time:true, kill_timeout:15000, max_memory_restart:'400M', min_uptime:'20s', max_restarts:20, restart_delay:5000, exp_backoff_restart_delay:200, out_file:'/srv/arb-system/api/logs/pm2/access-risk-worker-out.log', error_file:'/srv/arb-system/api/logs/pm2/access-risk-worker-error.log', merge_logs:true, env:{ NODE_ENV:'production' } }
 
   ],
 };
