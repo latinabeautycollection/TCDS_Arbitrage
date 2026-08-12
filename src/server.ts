@@ -44,6 +44,8 @@ import { createDomain7H2Module } from './domains/forensic/access/accessRiskModul
 import { attachAccessPrincipal } from './domains/forensic/access/auth/accessPrincipalMiddleware';
 import { createCertificationModule as createIntegrationCertModule } from './domains/forensic/certification/integration/certificationModule';
 import { createOperationsModule } from './domains/forensic/operations/integration/operationsModule';
+import { createResilienceModule } from './domains/forensic/resilience/integration/resilienceModule';
+import { createVaultTransitKeyManagementProvider } from './domains/forensic/resilience/providers/vaultTransitKeyManagementProvider';
 
 const logger = createLogger({
   serviceName: process.env.APP_SERVICE_NAME ?? 'arb-system-api',
@@ -265,6 +267,19 @@ function mountApiRoutes(input: {
   safeMount('domain7-operations', () => {
     const ops = createOperationsModule(pool);
     app.use('/domain7/forensic/operations', requireForensicAuthenticationSession, attachAccessPrincipal(pool), ops.router);
+  });
+  safeMount('domain7-resilience', () => {
+    if (!process.env.FORENSIC_BACKUP_SOURCE_DATABASE_URL || !process.env.VAULT_ADDR) {
+      console.log('[domain7-resilience] not configured (forensic-backup env absent) — skipping mount');
+      return;
+    }
+    const kms = createVaultTransitKeyManagementProvider(process.env);
+    const resilience = createResilienceModule(pool, kms, process.env);
+    app.use('/domain7/forensic/resilience',
+      requireForensicAuthenticationSession,
+      attachAccessPrincipal(pool),
+      resilience.router);
+    console.log('[domain7-resilience] mounted at /domain7/forensic/resilience');
   });
   safeMount('domain7-forensic-unified', () => {
     const domain7Logger: ForensicLogger = {
