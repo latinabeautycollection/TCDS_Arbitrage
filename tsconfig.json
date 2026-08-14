@@ -26,6 +26,7 @@
     "node_modules",
     "src/tests",
     "src/forensic.bak/**",
-    "src/domains/forensic/tests"
+    "src/domains/forensic/tests",
+    "src/domains/returnDefense/tests"
   ]
 }
