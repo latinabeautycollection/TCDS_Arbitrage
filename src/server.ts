@@ -12,6 +12,7 @@ import { JobStore } from './services/jobStore';
 import { HealthService } from './services/healthService';
 import { MetricsService } from './services/metricsService';
 import { createMetricsRouter } from './routes/metrics';
+import { mountDomain8Release } from './domains/returnDefense/bootstrap/domainReleaseBootstrap';
 import { createAcquisitionDecisionHealthRouter } from './routes/acquisitionDecisionHealthRoutes';
 import { createCapitalAllocationHealthRouter } from './routes/capitalAllocationHealthRoutes';
 import { buildFedExRoutes } from './domains/shipping/routes/fedexRoutes';
@@ -179,6 +180,8 @@ function mountApiRoutes(input: {
   // --------------------------------------------------------------------------
   app.use(createMetricsRouter({ metricsService, logger }));
   app.use(healthRoutes);
+  // Domain 8 executive release: routes + health/domain8/release (per-request auth via releaseTrustedContext / domain8AuthAdapter)
+  mountDomain8Release(app, pool);
   app.use(ebayAuthRoutes);
   app.use(upsAuthRoutes);
   app.use(shipengineWebhookRoutes);

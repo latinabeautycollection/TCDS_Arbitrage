@@ -7,7 +7,7 @@ import { DomainReleaseDispatcher } from "../certification/domainReleaseDispatche
 
 export class DomainReleaseWorker {
   private readonly dispatcher = new DomainReleaseDispatcher();
-  private readonly processorVersion = "8G.1.2";
+  private readonly processorVersion = "8G.1.3";
 
   public constructor(
     private readonly repository: DomainReleaseRepository,

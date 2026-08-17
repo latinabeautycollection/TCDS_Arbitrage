@@ -34,7 +34,7 @@ export class DomainReleaseRepository {
   ): Promise<ReleaseJob[]> {
     return this.transaction(context, async (client) => {
       const result = await client.query<ReleaseJob>(
-        "select * from return_defense.claim_domain_release_jobs($1,$2,interval '10 minutes')",
+        "select * from return_defense.claim_domain_release_jobs_v2($1,$2,interval '10 minutes')",
         [workerId, limit],
       );
       return result.rows;

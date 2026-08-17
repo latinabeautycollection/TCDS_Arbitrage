@@ -1,6 +1,16 @@
 module.exports = {
   apps: [
     {
+      name: 'tcds-domain8-release-worker',
+      script: 'dist/domains/returnDefense/workers/domainReleaseWorkerBootstrap.js',
+      instances: 1,
+      exec_mode: 'fork',
+      autorestart: true,
+      restart_delay: 5000,
+      max_memory_restart: '512M',
+      kill_timeout: 15000
+    },
+    {
       name: 'arb-api',
       script: './dist/server.js',
       node_args: '-r dotenv/config',
