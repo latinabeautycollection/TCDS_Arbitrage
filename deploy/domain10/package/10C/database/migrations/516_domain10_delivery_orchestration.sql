@@ -656,6 +656,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 BEGIN
   IF p_batch_size<1 OR p_batch_size>100 THEN RAISE EXCEPTION 'Invalid reconciliation batch size'; END IF;
   IF p_lease_seconds<30 OR p_lease_seconds>900 THEN RAISE EXCEPTION 'Invalid reconciliation lease'; END IF;

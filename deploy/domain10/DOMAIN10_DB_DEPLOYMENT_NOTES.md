@@ -46,3 +46,14 @@ TELNYX_API_KEY + DATABASE_URL.
 STATUS: delivery worker live + idle-clean. PENDING for full event->auto-send: wire the 10B planner
 worker + seed governance config (notification_policies/templates/audiences, frozen) so the pipeline
 PRODUCES claimable deliveries. Manual SMS/email sends already proven via direct API.
+
+## PLANNER + GOVERNANCE — full pipeline live (2026-08-24)
+Planner wired into domain10DeliveryBootstrap.ts (runNotificationPlanningBatch loop) + DOMAIN10_PLANNER_ENABLED=true (.env).
+Governance smoke config seeded (deploy/domain10/governance_smoke_seed.sql): EMAIL channel_controls enabled;
+alerts@ recipient + EMAIL authorization + OPERATIONS audience membership; DOMAIN10_SMOKE_TEST event type +
+frozen event contract; frozen EMAIL template; DOMAIN10_SMOKE_POLICY bound + frozen.
+END-TO-END PROVEN: ingest_operational_event(DOMAIN10_SMOKE_TEST) -> planner PLANNED -> delivery
+ACCEPTED_BY_PROVIDER (Microsoft Graph HTTP 202), no manual step (real email to alerts@).
+DELIVERED-state confirmation additionally needs Graph message-trace/webhook evidence wiring (future).
+Residual #9: 10C claim_delivery_reconciliation_10c RETURNS TABLE OUT col `state` collided with the table
+column in the lease-reset UPDATE ('column reference state is ambiguous') -> fixed with #variable_conflict use_column.

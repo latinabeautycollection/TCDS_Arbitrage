@@ -13,6 +13,7 @@ import {
 import { MicrosoftGraphEmailProvider } from "../domains/operations/providers/microsoftGraphEmailProvider";
 import { runDeliveryOrchestrationBatch } from "../domains/operations/delivery/workers/deliveryOrchestrationWorker";
 import { runDeliveryReconciliationBatch } from "../domains/operations/delivery/workers/deliveryReconciliationWorker";
+import { runNotificationPlanningBatch } from "../domains/operations/workers/notificationPlanningWorker";
 
 const logger: Domain10Runtime["logger"] = {
   info: (m, c) => console.log(JSON.stringify({ lvl: "info", m, ...(c ?? {}) })),
@@ -66,6 +67,7 @@ const guard = (name: string, fn: () => Promise<number>) => {
   };
 };
 const timers = [
+  setInterval(guard("planner", () => runNotificationPlanningBatch()), 5000),
   setInterval(guard("delivery:EMAIL", () => runDeliveryOrchestrationBatch("EMAIL")), 5000),
   setInterval(guard("delivery:SMS", () => runDeliveryOrchestrationBatch("SMS")), 5000),
   setInterval(guard("reconciliation", () => runDeliveryReconciliationBatch()), 30000),
