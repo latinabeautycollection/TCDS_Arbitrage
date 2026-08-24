@@ -1,0 +1,15 @@
+{
+  "review_version": "Domain10-A-F-PeerReview-2026-08-22",
+  "table_collisions": {},
+  "functions_redefined_across_slices": {},
+  "severity_rank_present": true,
+  "combined_typescript_static_contract_pass": true,
+  "combined_typescript_output": "",
+  "production_root_required_dependencies": [
+    "ajv@8.17.1",
+    "ajv-formats@3.0.1"
+  ],
+  "legacy_email_authority_policy": "must remain unscheduled or be removed/migrated",
+  "architecture_certification": "GREEN_TIER_1_CERTIFIABLE_TARGET_AFTER_PRODUCTION_PREREQUISITES",
+  "deployed_certification": "PENDING_LIVE_10F_ATTESTATIONS"
+}

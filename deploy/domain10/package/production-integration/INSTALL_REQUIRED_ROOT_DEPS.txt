@@ -1,0 +1,11 @@
+Production root prerequisite before overlaying reviewed 10B:
+
+npm install --save-exact ajv@8.17.1 ajv-formats@3.0.1
+
+Then commit both package.json and package-lock.json and run:
+npm ci
+npm run build
+npm test
+
+The reviewed 10B validator imports ajv and ajv-formats. As of the peer review,
+the current public production package.json does not list these two dependencies.

@@ -1,0 +1,15 @@
+{
+  "README.md": "65953bbb6b86ed0585d5bbab551c5ad44edbcb414d38a184da33a60a90f17be2",
+  "database/migrations/510_domain10_notifications_operations.sql": "0d1661f7cf699cd650598188e2bccd8b376bc8fd92eb35e2b4f9ec060f801174",
+  "database/migrations/511_domain10_green_tier1_hardening.sql": "0e2e3e3a04044ce93aabce1629528759df54b99280c6846bfb16aec9176cefae",
+  "database/rollback/510_domain10_notifications_operations_rollback.sql": "0a8eb8fa909ee9b6f6d66dc87c6f7ac36ce6508fbd2d6d2c9bd4443a28b8cc54",
+  "database/security/512_domain10_least_privilege_roles.sql": "8b543c7513e61aa7ebd869eb8bfcc62f1710c122fe554796489851108c9a0ed2",
+  "database/seeds/510_domain10_seed.sql": "c78475d12674977945552cbd3837645bce2f310bb8d5c2c1a158c425fd3ed25b",
+  "database/tests/510_domain10_contract_tests.sql": "5e08950f28854e3a12b4c9eb5b8767024cae3bbce484bb6f0fa99c7e194b0aec",
+  "database/tests/511_domain10_hardening_tests.sql": "b4a2fa5763082219e829086fa46f612c9c21cc247f29be89918a636d6f97df6e",
+  "docs/10A_ARCHITECTURE.md": "90d100bc19370c17b87e9656b80d244200b956e6d7b2ac8645dc5b0f1d0e6b84",
+  "docs/10A_CERTIFICATION_MATRIX.md": "48d74889f67d7d52f7aed0a27e54e60452fd3bcf315edb33f3fcda127e25bb7d",
+  "docs/10A_FINAL_REVIEW.md": "21c8999bbb84ae454072af58552274588f22751a64a8f4b26da5a4e975afdc32",
+  "scripts/certify-domain10-10a.sh": "b29171b1990d3274fa948945ee84e1e5b0b2ce47f7f97cf1e45242e5b830c801",
+  "scripts/preflight-domain10-10a.sh": "e1a6797772b21a6b7ba7b3ac4100d053582622f218ed4bb3c1832d4ce4f59f26"
+}

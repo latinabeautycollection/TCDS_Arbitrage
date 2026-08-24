@@ -1,0 +1,30 @@
+{
+  "review_version": "10C-Reviewed-Final-2",
+  "passes": {
+    "runtime_path_collision_with_attached_10B": true,
+    "sql_table_collision_with_reviewed_10A_10B": true,
+    "sql_function_collision_with_reviewed_10A_10B": true,
+    "strict_typescript_contract_check": true,
+    "graph_adapter_matches_current_production_contract_shape": true,
+    "legacy_email_worker_semantic_collision_guard_present": true
+  },
+  "details": {
+    "runtime_collisions": [],
+    "table_collisions": [],
+    "function_collisions": [],
+    "tsc_stdout": "",
+    "tsc_stderr": ""
+  },
+  "remediated_findings": [
+    "production Graph adapter signature mismatch",
+    "lost Graph/Telnyx explicit retry semantics",
+    "duplicate provider-owned sender/profile configuration",
+    "safe claim release misclassified as unexpected error",
+    "global SMS suppression invoked from one claimed delivery",
+    "MANUAL_REVIEW_REQUIRED reconciliation dead-end",
+    "unsafe direct receipt-role final-delivery permission",
+    "provider acceptance lacked worker/lease wrapper",
+    "contradictory Telnyx terminal evidence not reconciled",
+    "semantic dual-email-worker collision not checked"
+  ]
+}

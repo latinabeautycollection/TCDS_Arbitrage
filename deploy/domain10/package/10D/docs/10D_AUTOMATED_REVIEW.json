@@ -1,0 +1,51 @@
+{
+  "review_version": "10D-Reviewed-Final-3",
+  "basis": {
+    "uploaded_10D_zip": "TCDS_Domain10_10D_IncidentLifecycle_GreenTier1_FINAL(1).zip",
+    "reviewed_10A": "tcds-domain10-10A-postgres-green-tier1",
+    "reviewed_10B": "TCDS_Domain10_10B_REVIEWED_FINAL",
+    "reviewed_10C": "TCDS_Domain10_10C_DeliveryOrchestration_GreenTier1_REVIEWED_FINAL"
+  },
+  "original_uploaded_10D_verdict": "NOT_CERTIFIED_AS_LITERAL_10_OF_10",
+  "reviewed_code_contract_verdict": "GREEN_TIER_1_TARGET_APPROVED",
+  "passes": {
+    "runtime_path_collision_with_reviewed_10B_10C": true,
+    "sql_table_collision_with_reviewed_10A_10B_10C": true,
+    "sql_function_collision_with_reviewed_10A_10B_10C": true,
+    "strict_typescript_contract_check": true,
+    "security_definer_worker_boundary": true,
+    "activation_trigger_definer": true,
+    "owner_required_branch": true,
+    "authoritative_10b_binding_precheck": true,
+    "bounded_emission_retry": true,
+    "command_collision_guard": true,
+    "public_execute_revoked": true,
+    "no_direct_provider_imports": true,
+    "no_root_package": true,
+    "no_root_tsconfig": true
+  },
+  "details": {
+    "runtime_collisions": [],
+    "table_collisions": [],
+    "function_collisions": [],
+    "tsc_stdout": "",
+    "tsc_stderr": ""
+  },
+  "material_findings_remediated": [
+    "invoker-rights worker functions incompatible with least-privilege roles",
+    "10B notification-request trigger crossed into 10D queue write privilege",
+    "owner-required lifecycle authorization accepted ordinary assignments",
+    "escalation binding did not prove bound 10B policy was the unique authoritative winner",
+    "10D-to-10B escalation event emission retry was unbounded",
+    "incident command idempotency collisions were not rejected",
+    "terminal incident commands were not explicitly governed as no-op",
+    "application incident commands lacked freshness validation"
+  ],
+  "live_certification_not_executed": [
+    "PostgreSQL migration execution because psql is unavailable in this runtime",
+    "production repository overlay npm ci/build/Jest",
+    "multi-session SKIP LOCKED behavior",
+    "real ACK/OWN/DECLINE incident drills",
+    "real escalation handoff through 10B and delivery through 10C"
+  ]
+}

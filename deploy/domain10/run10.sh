@@ -1,0 +1,16 @@
+set -u
+D=/tmp/domain10/TCDS_Domain10_10A-10F_PeerReview_Remediation_FINAL
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "DROP SCHEMA IF EXISTS operations CASCADE;" >/dev/null && echo "== dropped operations =="
+echo "######## 10A ########"; bash "$D/10A/scripts/certify-domain10-10a.sh" 2>&1 | grep -iE 'ERROR|FATAL|PASS'
+runslice() { local s="$1"; shift; cd "$D/$s" || return 1; echo "######## $s ########"
+  bash "scripts/preflight-domain10-$(echo $s|tr A-Z a-z).sh" 2>&1 | grep -iE 'ERROR|FATAL|FAIL|PASS' || true
+  for f in "$@"; do out=$(psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f" 2>&1); rc=$?
+    echo "$out" | grep -iE 'ERROR|FATAL|PASS' || true
+    if [ $rc -ne 0 ]; then echo ">>> STOP: $f"; echo "$out"|tail -6; return 1; fi; done
+  echo "== $s DB OK =="; }
+runslice 10B database/preflight/513_preflight_domain10_10b.sql database/migrations/513_domain10_event_decision_engine.sql database/migrations/514_domain10_10b_green_tier1_hardening.sql database/security/515_domain10_10b_least_privilege_roles.sql database/seeds/513_domain10_10b_seed.sql database/tests/513_domain10_10b_contract_tests.sql database/tests/514_domain10_10b_hardening_tests.sql &&
+runslice 10C database/preflight/516_preflight_domain10_10c.sql database/migrations/516_domain10_delivery_orchestration.sql database/migrations/517_domain10_delivery_orchestration_hardening.sql database/security/518_domain10_10c_least_privilege_roles.sql database/tests/516_domain10_10c_contract_tests.sql &&
+runslice 10D database/preflight/519_preflight_domain10_10d.sql database/migrations/519_domain10_incident_lifecycle_escalation.sql database/migrations/520_domain10_incident_lifecycle_hardening.sql database/security/521_domain10_10d_least_privilege_roles.sql database/migrations/522_domain10_10d_review_hardening.sql database/security/523_domain10_10d_reviewed_least_privilege.sql database/seeds/519_domain10_10d_integration_seed.sql database/tests/519_domain10_10d_contract_tests.sql database/tests/522_domain10_10d_review_hardening_tests.sql &&
+runslice 10E database/preflight/524_preflight_domain10_10e.sql database/migrations/524_domain10_communication_assurance.sql database/migrations/525_domain10_communication_assurance_hardening.sql database/security/526_domain10_10e_least_privilege.sql database/migrations/527_domain10_communication_assurance_review_hardening.sql database/security/528_domain10_10e_reviewed_privilege_lockdown.sql database/seeds/524_domain10_10e_integration_seed.sql database/tests/524_domain10_10e_contract_tests.sql database/tests/527_domain10_10e_review_hardening_tests.sql &&
+runslice 10F database/preflight/529_preflight_domain10_10f.sql database/migrations/529_domain10_enterprise_certification.sql database/migrations/530_domain10_enterprise_certification_hardening.sql database/security/531_domain10_10f_least_privilege.sql database/seeds/529_domain10_10f_default_profile.sql database/migrations/532_domain10_10f_enterprise_review_hardening.sql database/seeds/533_domain10_10f_reviewed_profile_v2.sql database/security/534_domain10_10f_reviewed_privilege_lockdown.sql database/tests/529_domain10_10f_contract_tests.sql database/tests/532_domain10_10f_review_hardening_tests.sql &&
+echo "######## ALL 10A-10F DB LAYERS CERTIFIED ########"

@@ -1,0 +1,24 @@
+{
+  "review_version": "10E-Reviewed-Final-2.0",
+  "pass1": {
+    "table_collisions": [],
+    "function_collisions": [],
+    "runtime_collisions": [],
+    "typescript_strict": true
+  },
+  "pass2": {
+    "maturity_delay": true,
+    "catchup": true,
+    "bounded_retry": true,
+    "contiguous_hysteresis": true,
+    "ack_due": true,
+    "policy_semantics": true,
+    "linkage": true
+  },
+  "live_certification_pending": [
+    "PostgreSQL execution unavailable in this runtime",
+    "production root npm ci/build/Jest after overlay",
+    "multi-session SKIP LOCKED",
+    "forced breach/recovery through 10B"
+  ]
+}

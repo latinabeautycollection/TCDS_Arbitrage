@@ -1,0 +1,10 @@
+{
+  "runId": "<uuid>",
+  "attestationType": "<required type>",
+  "outcome": "PASS",
+  "evidenceSha256": "<sha256>",
+  "evidenceReference": "<CI artifact/log/test report reference>",
+  "attestedBy": "<CI identity or approved operator>",
+  "toolVersion": "<version>",
+  "notes": "<optional>"
+}
