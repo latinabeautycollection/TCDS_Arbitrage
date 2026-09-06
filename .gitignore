@@ -50,3 +50,8 @@ ecosystem.comp.config.js
 *.bak.*
 *.bak-*
 ._*
+.certification/
+/install-usps-shipping.sh
+/patch_domain1_json.py
+/patch_domain1_runs.py
+/patch_domain1_worker.py
