@@ -1,0 +1,3 @@
+import{ReplayAdapterRegistry,ReplayExecutionEngine}from'../../domains/governance/services/replayExecutionEngine';
+test('replay adapter invokes domain-owned interface',async()=>{const r=new ReplayAdapterRegistry().register({target:'11F',execute:async c=>({decision:'BLOCK',input:c.input})});const e=new ReplayExecutionEngine(r);await expect(e.execute('11F',{releaseCandidateId:'r',scenarioCode:'S',scenarioVersion:1,fixtureReference:'f',input:{x:1}})).resolves.toMatchObject({decision:'BLOCK'})});
+test('missing adapter fails closed',async()=>{await expect(new ReplayExecutionEngine(new ReplayAdapterRegistry()).execute('DOMAIN_3',{releaseCandidateId:'r',scenarioCode:'S',scenarioVersion:1,fixtureReference:'f',input:{}})).rejects.toThrow('REPLAY_ADAPTER_UNAVAILABLE')});

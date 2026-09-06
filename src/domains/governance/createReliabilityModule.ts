@@ -1,0 +1,3 @@
+import type{Pool}from'pg';import type{RequestHandler}from'express';
+import{ReliabilityRepository}from'./repositories/reliabilityRepository';import{ReliabilityService}from'./services/reliabilityService';import{createReliabilityRoutes}from'./routes/reliabilityRoutes';import{reliabilityErrorMiddleware}from'./errors/reliabilityErrorMiddleware';
+export function createReliabilityModule(x:{pool:Pool;auth:{read:RequestHandler;evaluate:RequestHandler;admin:RequestHandler}}){const repo=new ReliabilityRepository(x.pool);const service=new ReliabilityService(repo);return{repo,service,router:createReliabilityRoutes({service,...x.auth}),errorMiddleware:reliabilityErrorMiddleware}}

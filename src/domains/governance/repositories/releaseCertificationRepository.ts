@@ -1,0 +1,20 @@
+import type{Pool}from'pg';
+import type{RegisterReleaseRequest,StartCertificationRequest,GateEvidenceRequest,BeginReplayRequest,CompleteReplayRequest}from'../models/releaseCertificationTypes';
+export class ReleaseCertificationRepository{
+ constructor(private readonly adminPool:Pool,private readonly runtimePool:Pool,private readonly replayPool:Pool,private readonly deploymentPool:Pool){}
+ async componentId(code:'DOMAIN11K_RELEASE_ENGINE'|'DOMAIN11K_REPLAY_ENGINE'|'DOMAIN11K_DEPLOYMENT_VERIFIER'){
+  const q=await this.runtimePool.query<{component_id:string}>(`select component_id from arb.component_registry where component_code=$1 and active`,[code]);
+  if(q.rowCount!==1)throw Object.assign(new Error('DOMAIN11K_COMPONENT_MISSING'),{statusCode:503});return q.rows[0]!.component_id;
+ }
+ async syncPolicy(){return (await this.adminPool.query<{result:Record<string,unknown>}>(`select arb.domain11k_sync_policy_semantics() result`)).rows[0]!.result}
+ async registerRelease(x:RegisterReleaseRequest){return (await this.adminPool.query<{id:string}>(`select arb.domain11k_register_release_candidate($1::jsonb,$2::uuid,$3::uuid,$4) id`,[JSON.stringify(x.manifest),x.requestId,x.correlationId,x.idempotencyKey])).rows[0]!.id}
+ async sealRelease(id:string){return (await this.adminPool.query<{sha:string}>(`select arb.domain11k_seal_release_candidate($1::uuid) sha`,[id])).rows[0]!.sha}
+ async startCertification(x:StartCertificationRequest){return (await this.adminPool.query<{id:string}>(`select arb.domain11k_start_certification($1::uuid,$2,$3,$4::uuid,$5::uuid) id`,[x.releaseCandidateId,x.environment,x.phase,x.requestId,x.correlationId])).rows[0]!.id}
+ async recordGate(x:GateEvidenceRequest,componentId:string){return (await this.runtimePool.query<{id:string}>(`select arb.domain11k_record_gate_evidence($1::uuid,$2,$3,$4,$5,$6::jsonb,$7::timestamptz,$8::timestamptz,$9::jsonb,$10::uuid,$11::uuid,$12::uuid) id`,[x.certificationRunId,x.gateCode,x.gateVersion,x.result,x.evidenceReference,JSON.stringify(x.evidencePayload),x.startedAt,x.completedAt,JSON.stringify(x.toolRuntime),x.requestId,x.correlationId,componentId])).rows[0]!.id}
+ async finalize(runId:string){return (await this.runtimePool.query<{status:string}>(`select arb.domain11k_finalize_certification($1::uuid) status`,[runId])).rows[0]!.status}
+ async beginReplay(x:BeginReplayRequest){return (await this.replayPool.query<{id:string}>(`select arb.domain11k_begin_replay($1::uuid,$2::uuid,$3::uuid,$4::uuid) id`,[x.certificationRunId,x.replayScenarioId,x.requestId,x.correlationId])).rows[0]!.id}
+ async completeReplay(x:CompleteReplayRequest){return (await this.replayPool.query<{id:string}>(`select arb.domain11k_complete_replay($1::uuid,$2::jsonb,$3::jsonb) id`,[x.replayRunId,JSON.stringify(x.actualResult),JSON.stringify(x.difference)])).rows[0]!.id}
+ async verifyDeployment(x:import('../models/releaseCertificationTypes').DeploymentVerificationRequest,componentId:string){return (await this.deploymentPool.query<{id:string}>(`select arb.domain11k_record_deployment_verification($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8::jsonb,$9::uuid,$10::uuid,$11::uuid) id`,[x.releaseCandidateId,x.certificationRunId,x.environment,x.phase,x.deployedArtifactManifestSha256,x.deployedMigrationManifestSha256,x.readinessComponentId,JSON.stringify(x.verificationPayload),x.requestId,x.correlationId,componentId])).rows[0]!.id}
+ async certifyRollback(x:import('../models/releaseCertificationTypes').RollbackCertificationRequest,componentId:string){return (await this.runtimePool.query<{id:string}>(`select arb.domain11k_record_rollback_certification($1::uuid,$2,$3,$4::jsonb,$5::uuid,$6::uuid,$7::uuid) id`,[x.certificationRunId,x.environment,x.rollbackManifestSha256,JSON.stringify(x.executionEvidence),x.requestId,x.correlationId,componentId])).rows[0]!.id}
+ async summary(id:string){return (await this.runtimePool.query(`select * from arb.v_domain11k_release_certification_summary where release_candidate_id=$1::uuid`,[id])).rows[0]??null}
+}

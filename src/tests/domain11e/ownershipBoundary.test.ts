@@ -1,0 +1,2 @@
+import fs from 'node:fs';import path from 'node:path';
+describe('11E ownership boundary',()=>{const root=path.resolve(__dirname,'../../domains/governance');test('does not implement future business engines',()=>{const text=fs.readdirSync(root,{recursive:true}).filter(x=>String(x).endsWith('.ts')).map(x=>fs.readFileSync(path.join(root,String(x)),'utf8')).join('\n');for(const forbidden of ['allocateCapital(','chooseCarrier(','approveRefund(','routeAIModel(','control_decisions insert','capital_safety_assessments insert'])expect(text).not.toContain(forbidden);});});

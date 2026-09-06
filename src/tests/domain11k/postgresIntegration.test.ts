@@ -1,0 +1,12 @@
+import{Pool}from'pg';
+const url=process.env.DOMAIN11K_DATABASE_URL;if(process.env.DOMAIN11K_CERTIFICATION_MODE==='true'&&!url)throw new Error('DOMAIN11K_DATABASE_URL required');const d=url?describe:describe.skip;
+d('11K PostgreSQL authority',()=>{const p=new Pool({connectionString:url});afterAll(async()=>p.end());
+ test('PUBLIC cannot execute 11K functions',async()=>{const q=await p.query(`select count(*)::int n from pg_proc x join pg_namespace n on n.oid=x.pronamespace cross join lateral aclexplode(coalesce(x.proacl,acldefault('f',x.proowner)))a where n.nspname='arb' and x.proname like 'domain11k_%' and a.grantee=0 and a.privilege_type='EXECUTE'`);expect(q.rows[0].n).toBe(0)});
+ test('runtime cannot write 11A certification ledger directly',async()=>{const q=await p.query(`select has_table_privilege('tcds_governance_release_runtime','arb.certification_runs','INSERT,UPDATE,DELETE') x`);expect(q.rows[0].x).toBe(false)});
+ test('replay runtime cannot write 11A replay ledger directly',async()=>{const q=await p.query(`select has_table_privilege('tcds_governance_replay_runtime','arb.replay_runs','INSERT,UPDATE,DELETE') x`);expect(q.rows[0].x).toBe(false)});
+ test('release admin cannot bypass sealed write functions',async()=>{const q=await p.query(`select has_table_privilege('tcds_governance_release_admin','arb.release_candidates_11k','INSERT,UPDATE,DELETE') x`);expect(q.rows[0].x).toBe(false)});
+ test('deployment verifier cannot write release certification ledger',async()=>{const q=await p.query(`select has_table_privilege('tcds_governance_deployment_verifier','arb.certification_runs','INSERT,UPDATE,DELETE') x`);expect(q.rows[0].x).toBe(false)});
+ test('legacy caller-authoritative replay signature is absent',async()=>{const q=await p.query(`select to_regprocedure('arb.domain11k_complete_replay(uuid,jsonb,text,jsonb)') is null x`);expect(q.rows[0].x).toBe(true)});
+ test('legacy caller-authoritative finalize phase signature is absent',async()=>{const q=await p.query(`select to_regprocedure('arb.domain11k_finalize_certification(uuid,text)') is null x`);expect(q.rows[0].x).toBe(true)});
+ test('release policy exists for certification environment',async()=>{const q=await p.query(`select exists(select 1 from arb.v_effective_policy_versions where policy_code='RELEASE_CERTIFICATION_POLICY') x`);expect(q.rows[0].x).toBe(true)});
+});

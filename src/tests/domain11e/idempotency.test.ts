@@ -1,0 +1,1 @@
+test('idempotency doctrine is immutable DO NOTHING',()=>{const sql=require('node:fs').readFileSync(require('node:path').resolve(__dirname,'../../../sql/1105_domain11e_immutable_accountability.sql'),'utf8');expect(sql).toContain('ON CONFLICT (idempotency_key) DO NOTHING');expect(sql).not.toMatch(/ON CONFLICT \(idempotency_key\) DO UPDATE/i);});

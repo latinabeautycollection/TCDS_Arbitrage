@@ -1,0 +1,22 @@
+import {evaluateCapitalSafety,aggregate} from '../../domains/governance/engines/capitalSafetyDecisionEngine';
+import type {CapitalSafetyEvaluationInput,ControlResult} from '../../domains/governance/models/capitalSafetyTypes';
+
+function base():CapitalSafetyEvaluationInput{
+  const now=new Date('2026-08-23T20:00:00Z');
+  return {now,
+    proposal:{externalDecisionId:'domain2:1:a',capitalAllocationRunId:1,sourceRecordId:'a',decisionId:'d',listingId:'l',candidateId:'c',categoryKey:'electronics',familyKey:'laptop',skuKey:'sku1',supplierKey:'supplier1',marketplaceKey:'ebay',requestedAmount:100,requiredCapital:100,currencyCode:'USD',executionStatus:'AUTO_BUY_READY',purchaseQueueStatus:'approved',purchaseLifecycle:{currentState:'APPROVED',currentQueueStatus:'approved',currentStatus:'ready',approvedAt:new Date('2026-08-23T19:59:40Z'),crossedSideEffectBoundary:false,duplicateIdentityConflict:false,reference:'arb.purchase_queue:1:a',observedAt:new Date('2026-08-23T19:59:50Z')},currentAcquisitionEvidence:'PASS',currentAcquisitionObservedAt:new Date('2026-08-23T19:59:35Z'),currentAcquisitionEvidenceReference:'arb.v_domain2_buy_qualified_source:a',createdAt:new Date('2026-08-23T19:59:30Z')},
+    financial:{sourceReference:'financial:1',observedAt:new Date('2026-08-23T19:59:45Z'),completeness:'COMPLETE',currencyCode:'USD',ledgerBalance:5000,reservedCapital:0,committedCapital:0,pendingPurchaseExposure:0,settledPurchaseExposure:0,authoritativeCapitalAtRisk:500,authoritativeDailyCapitalAtRisk:500,unreconciledTransactions:0,availableToDeploy:3000,domain2RemainingCapitalUsd:3000,sourceHash:'a'.repeat(64)},
+    readiness:{componentId:'r',assessmentId:'ra',readinessState:'READY',canMutateState:true,capitalTechnicalReadiness:true,canCreateExternalSideEffects:true,evaluatedAt:new Date('2026-08-23T19:59:40Z'),validUntil:new Date('2026-08-23T20:01:00Z'),expired:false},
+    policy:{governancePolicyId:'p',governancePolicyVersionId:'pv',policySha256:'b'.repeat(64),configurationSha256:'c'.repeat(64),effectiveFrom:null,effectiveUntil:new Date('2026-08-24T00:00:00Z'),consumerDriftStatus:'MATCH',consumerAcknowledged:true,configuration:{currencyCode:'USD',totalCapitalCeiling:5000,dailyCapitalCeiling:5000,perTransactionLimit:500,maxProposalAgeSeconds:3600,maxFinancialStateAgeSeconds:60,maxAcquisitionEvidenceAgeSeconds:120,authorizationTtlSeconds:60,abnormalTransactionReviewAmount:1000,requireFullFinancialReconciliation:true,maxCategoryExposurePct:.5,maxSkuExposurePct:.25,maxSupplierExposurePct:.5,maxMarketplaceExposurePct:.75,capitalExecutionComponentId:'r'}},
+    exposure:{provisionalAuthorized:0,dailyAuthorized:0,authoritativeCapitalAtRisk:500,categoryProvisional:0,familyProvisional:0,skuProvisional:0,supplierProvisional:0,marketplaceProvisional:0,categoryAuthoritative:200,familyAuthoritative:200,skuAuthoritative:100,supplierAuthoritative:200,marketplaceAuthoritative:500}
+  };
+}
+
+describe('Domain11F V2 deterministic decision engine',()=>{
+  test('all mandatory controls pass -> ALLOW',()=>expect(evaluateCapitalSafety(base()).evaluationState).toBe('ALLOW'));
+  test('committed current proposal -> BLOCK',()=>{const x=base();x.proposal.purchaseLifecycle.currentState='COMMITTED';x.proposal.purchaseLifecycle.crossedSideEffectBoundary=true;expect(evaluateCapitalSafety(x).evaluationState).toBe('BLOCK');});
+  test('missing authoritative dimensional exposure -> UNKNOWN/HOLD',()=>{const x=base();x.exposure.categoryAuthoritative=null;const d=evaluateCapitalSafety(x);expect(d.evaluationState).toBe('UNKNOWN');expect(d.assessmentState).toBe('HOLD');});
+  test('committed exposure participates in ceiling',()=>{const x=base();x.financial.authoritativeCapitalAtRisk=4900;x.exposure.authoritativeCapitalAtRisk=4900;expect(evaluateCapitalSafety(x).evaluationState).toBe('BLOCK');});
+  test('stale acquisition evidence -> UNKNOWN/HOLD',()=>{const x=base();x.proposal.currentAcquisitionObservedAt=new Date('2026-08-23T19:00:00Z');const d=evaluateCapitalSafety(x);expect(d.evaluationState).toBe('UNKNOWN');expect(d.assessmentState).toBe('HOLD');});
+  test('safety-critical unknown outranks review',()=>{const c:ControlResult[]=[{controlCode:'A',controlSemanticVersion:1,result:'REVIEW',safetyCritical:false,reasonCode:'A',measuredValue:{},thresholdValue:{},evidenceReference:{},evaluatedAt:new Date()},{controlCode:'B',controlSemanticVersion:1,result:'UNKNOWN',safetyCritical:true,reasonCode:'B',measuredValue:{},thresholdValue:{},evidenceReference:{},evaluatedAt:new Date()}];expect(aggregate(c)).toBe('UNKNOWN');});
+});

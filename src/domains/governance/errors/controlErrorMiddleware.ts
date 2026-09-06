@@ -1,0 +1,2 @@
+import type{ErrorRequestHandler}from'express';
+export const controlErrorMiddleware:ErrorRequestHandler=(e,_q,r,_n)=>{const x=e as any;const msg=String(x.message??'CONTROL_REJECTED');const status=x.statusCode??(x.code==='42501'?403:x.code==='23505'?409:x.code==='23514'?422:msg.includes('NOT_FOUND')?404:msg.includes('MISMATCH')||msg.includes('INVALID')||msg.includes('REQUIRED')||msg.includes('EXPIRED')||msg.includes('TOO_OLD')?409:500);r.status(status).json({error:status>=500?'CONTROL_INTERNAL_ERROR':msg})};

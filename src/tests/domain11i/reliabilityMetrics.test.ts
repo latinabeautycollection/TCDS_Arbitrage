@@ -1,0 +1,2 @@
+import fs from'node:fs';import path from'node:path';
+test('metrics are wired into ReliabilityService',()=>{const s=fs.readFileSync(path.join(__dirname,'../../domains/governance/services/reliabilityService.ts'),'utf8');expect(s).toContain('this.metrics.evaluated');expect(s).toContain('this.metrics.observe');expect(s).toContain('this.metrics.baseline')});

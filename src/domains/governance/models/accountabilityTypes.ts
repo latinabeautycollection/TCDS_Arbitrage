@@ -1,0 +1,10 @@
+export type DomainCode = `DOMAIN_${number}`;
+export type EvidenceKind = 'MUTATION'|'AUDIT'|'LINEAGE_EDGE'|'DOMAIN_EVENT'|'EVENT_LINK';
+export interface AccountabilityPrincipal { reference:string; authSessionId:string; permissions:readonly string[]; }
+export interface EntityRef { domainCode:DomainCode; entityType:string; entityId:string; authoritativeReference?:string; }
+export interface LineageEdgeInput { source:EntityRef; relationshipType:string; target:EntityRef; correlationId?:string; causationId?:string; requestId?:string; occurredAt:Date; sourceComponentId?:string; referenceMetadata?:Record<string,unknown>; idempotencyKey:string; }
+export interface ExternalReferenceInput { domainCode:DomainCode; sourceSchema:string; sourceTable:string; sourceEntityId:string; externalLedgerId:string; externalRecordSha256:string; actorType:string; sourceComponentId?:string; requestId?:string; correlationId?:string; occurredAt:Date; idempotencyKey:string; }
+export interface Domain11MutationInput { sourceSchema:string; sourceTable:string; sourceEntityId:string; mutationKind:'INSERT'|'UPDATE'|'DELETE'|'STATE_TRANSITION'; beforeState?:Record<string,unknown>|null; afterState?:Record<string,unknown>|null; actorType:string; sourceComponentId?:string; requestId?:string; correlationId?:string; policyVersionId?:string; occurredAt:Date; idempotencyKey:string; }
+export interface AuditEventInput { eventType:string; severity:'DEBUG'|'INFO'|'NOTICE'|'WARNING'|'ERROR'|'CRITICAL'; actorType:string; targetDomainCode?:DomainCode; targetReference?:string; sourceComponentId?:string; action:string; outcome:'SUCCESS'|'DENIED'|'FAILED'|'PARTIAL'|'OBSERVED'; requestId?:string; correlationId?:string; remoteAddressHash?:string; details?:Record<string,unknown>; occurredAt:Date; idempotencyKey:string; }
+
+export interface EventLinkInput { mutationLedgerId?:string; auditEventId?:string; lineageEdgeId?:string; domainEventId:string; outboxEventId?:string; correlationId?:string; causationId?:string; idempotencyKey:string; }

@@ -1,0 +1,2 @@
+import type{ErrorRequestHandler}from'express';
+export const releaseCertificationErrorMiddleware:ErrorRequestHandler=(e,_q,r,_n)=>{const x=e as any;const m=String(x.message??'RELEASE_CERTIFICATION_REJECTED');const s=x.statusCode??(x.code==='42501'?403:x.code==='23505'?409:x.code==='23514'?422:m.includes('NOT_FOUND')?404:m.includes('INVALID')||m.includes('MISSING')||m.includes('MISMATCH')||m.includes('REQUIRED')||m.includes('NOT_')?409:500);r.status(s).json({error:s>=500?'RELEASE_CERTIFICATION_INTERNAL_ERROR':m})};

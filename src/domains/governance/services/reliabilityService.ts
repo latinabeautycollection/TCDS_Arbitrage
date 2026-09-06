@@ -1,0 +1,11 @@
+import type{ReliabilityPrincipal,EvaluateSloRequest,EvaluateDriftRequest,CreateBaselineRequest}from'../models/reliabilityTypes';
+import{ReliabilityRepository}from'../repositories/reliabilityRepository';import{reliabilityMetrics,type ReliabilityMetrics}from'../observability/reliabilityMetrics';
+export class ReliabilityService{
+ constructor(private readonly repo:ReliabilityRepository,private readonly metrics:ReliabilityMetrics=reliabilityMetrics){}
+ private need(p:ReliabilityPrincipal,x:string){if(!p.permissions.includes(x)&&!p.permissions.includes('governance.reliability.admin'))throw Object.assign(new Error('RELIABILITY_PERMISSION_DENIED'),{statusCode:403})}
+ async evaluateSlo(p:ReliabilityPrincipal,x:EvaluateSloRequest,worker=false){this.need(p,'governance.reliability.evaluate');const t=Date.now();try{const id=await this.repo.evaluateSlo(x,await this.repo.componentId(worker?'DOMAIN11I_RELIABILITY_WORKER':'DOMAIN11I_RELIABILITY_ENGINE'));this.metrics.evaluated('SLO','SUCCESS');return{measurementId:id}}catch(e){this.metrics.evaluated('SLO','FAILURE');throw e}finally{this.metrics.observe('SLO',(Date.now()-t)/1000)}}
+ async evaluateDrift(p:ReliabilityPrincipal,x:EvaluateDriftRequest,worker=false){this.need(p,'governance.reliability.evaluate');const t=Date.now();try{const id=await this.repo.evaluateDrift(x,await this.repo.componentId(worker?'DOMAIN11I_RELIABILITY_WORKER':'DOMAIN11I_RELIABILITY_ENGINE'));this.metrics.evaluated('DRIFT','SUCCESS');return{driftEvaluationId:id}}catch(e){this.metrics.evaluated('DRIFT','FAILURE');throw e}finally{this.metrics.observe('DRIFT',(Date.now()-t)/1000)}}
+ async createBaseline(p:ReliabilityPrincipal,x:CreateBaselineRequest){this.need(p,'governance.reliability.admin');const id=await this.repo.createBaseline(x,await this.repo.componentId());this.metrics.baseline(x.sourceAuthority,x.methodology);return{baselineId:id}}
+ async current(p:ReliabilityPrincipal){this.need(p,'governance.reliability.read');return this.repo.current()}
+ async drift(p:ReliabilityPrincipal,id:string){this.need(p,'governance.reliability.read');return this.repo.drift(id)}
+}

@@ -1,0 +1,2 @@
+import fs from'node:fs';import path from'node:path';
+test('action acknowledgement requires exact authorized 11G producer component',()=>{const s=fs.readFileSync(path.join(__dirname,'../../../sql/1110_domain11j_v2_hardening.sql'),'utf8');expect(s).toContain('CONTROL_ACTION_ACK_MISSING_AUTHORIZED_ENFORCER_ATTESTATION');expect(s).toContain('producer_component_id=o.producer_component_id');expect(s).toContain("operation_code='CONTROL_ACTION_ACKNOWLEDGED'");expect(s).toContain("authoritative_reference='arb.control_actions:'||action_id::text")});

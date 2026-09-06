@@ -1,0 +1,7 @@
+import express from 'express';import request from 'supertest';
+import { createObservabilityRoutes,type ObservabilityRouteAuth } from '../../domains/governance/routes/observabilityRoutes';import { observabilityErrorMiddleware } from '../../domains/governance/errors/observabilityErrorMiddleware';
+const allow:any=(_q:any,res:any,n:any)=>{res.locals.observabilityPrincipal={reference:'user-1',authSessionId:'123e4567-e89b-42d3-a456-426614174000',permissions:['governance.observability.ingest','governance.observability.read']};n();};const auth:ObservabilityRouteAuth={read:allow,ingest:allow,admin:allow};
+describe('11G V2 routes',()=>{
+ test('invalid correlation is 400',async()=>{const app=express();app.use(express.json());app.use(createObservabilityRoutes({auth,service:{} as any}));app.use(observabilityErrorMiddleware);await request(app).get('/governance/observability/correlations/nope').expect(400);});
+ test('HTTP ingestion passes trusted principal to service',async()=>{let actor='';const service:any={ingestUser:async(p:any)=>{actor=p.reference;return{observationId:'x'};}};const app=express();app.use(express.json());app.use(createObservabilityRoutes({auth,service}));app.use(observabilityErrorMiddleware);await request(app).post('/governance/observability/observations').send({observationType:'REQUEST',subjectDomainCode:'DOMAIN_11',operationCode:'TEST',outcome:'SUCCESS',severity:'INFO',metadata:{state:'OK'},occurredAt:new Date().toISOString(),idempotencyKey:'route-k'}).expect(201);expect(actor).toBe('user-1');});
+});

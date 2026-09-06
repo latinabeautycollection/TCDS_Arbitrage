@@ -1,0 +1,1 @@
+test('SECURITY DEFINER functions are protected from PUBLIC',()=>{const sql=require('node:fs').readFileSync(require('node:path').resolve(__dirname,'../../../sql/1105_domain11e_immutable_accountability.sql'),'utf8');expect(sql).toContain("p.proname LIKE 'domain11e_%'");expect(sql).toContain('REVOKE ALL ON FUNCTION');});

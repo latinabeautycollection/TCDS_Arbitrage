@@ -1,0 +1,1 @@
+import fs from 'node:fs'; test('11L route namespace does not claim root health/ready/metrics',()=>{const s=fs.readFileSync('src/domains/governance/executive/routes/executiveGovernanceRoutes.ts','utf8');expect(s).not.toContain("r.get('/health'");expect(s).not.toContain("r.get('/ready'");expect(s).not.toContain("r.get('/metrics'")});

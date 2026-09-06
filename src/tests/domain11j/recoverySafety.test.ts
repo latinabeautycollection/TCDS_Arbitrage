@@ -1,0 +1,4 @@
+import fs from'node:fs';import path from'node:path';
+test('restrictive expiry never auto-greens',()=>{const s=fs.readFileSync(path.join(__dirname,'../../../sql/1110_domain11j_recovery_and_actions.sql'),'utf8');expect(s).toContain("THEN 'RECOVERY_PENDING' ELSE 'EXPIRED'");expect(s).not.toMatch(/CONTROL_VALIDITY_EXPIRED[^]*effective_control_state='GREEN'/)});
+test('human approval cannot directly produce GREEN',()=>{const s=fs.readFileSync(path.join(__dirname,'../../../sql/1110_domain11j_recovery_and_actions.sql'),'utf8');const f=s.slice(s.indexOf('domain11j_approve_recovery_user'),s.indexOf('-- A human approval never restores operation'));expect(f).not.toContain("'GREEN'")});
+test('final recovery requires reverse acknowledgement',()=>{const s=fs.readFileSync(path.join(__dirname,'../../../sql/1110_domain11j_recovery_and_actions.sql'),'utf8');expect(s).toContain('RECOVERY_REVERSE_ACTION_NOT_ACKNOWLEDGED')});

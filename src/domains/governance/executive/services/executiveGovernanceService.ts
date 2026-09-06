@@ -1,0 +1,2 @@
+import type { ExecutiveGovernanceRepository } from '../repositories/executiveGovernanceRepository';
+export class ExecutiveGovernanceService { constructor(private readonly repo:ExecutiveGovernanceRepository){} summary(){return this.repo.getSummary()} createSnapshot(actor:import('../models/executiveGovernanceTypes').TrustedActor,idempotencyKey:string,evidenceCutoffAt:string){return this.repo.createSnapshot(actor,idempotencyKey,evidenceCutoffAt)} certification(){return this.repo.currentCertification()} epoch(){return this.repo.currentEpoch()} }

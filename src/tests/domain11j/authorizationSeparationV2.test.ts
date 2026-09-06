@@ -1,0 +1,4 @@
+import{requireControlPermission}from'../../domains/governance/integration/controlAuthorization';
+function run(perms:string[],required:string){const req:any={accessPrincipal:{userId:'u',authSessionId:'123e4567-e89b-42d3-a456-426614174000',permissions:perms}},res:any={locals:{},statusCode:200,status(n:number){this.statusCode=n;return this},json(x:any){this.body=x;return this}},next=jest.fn();requireControlPermission(required)(req,res,next);return{res,next}}
+test('control admin does not inherit recovery approval',()=>{const r=run(['governance.control.admin'],'governance.control.recovery.approve');expect(r.res.statusCode).toBe(403);expect(r.next).not.toHaveBeenCalled()});
+test('dedicated recovery approver passes',()=>{const r=run(['governance.control.recovery.approve'],'governance.control.recovery.approve');expect(r.next).toHaveBeenCalled()});

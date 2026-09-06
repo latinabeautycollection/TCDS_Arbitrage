@@ -1,0 +1,3 @@
+export interface AccountabilityLogger { info(message:string,fields?:Record<string,unknown>):void; warn(message:string,fields?:Record<string,unknown>):void; error(message:string,fields?:Record<string,unknown>):void; }
+export interface AccountabilityMetrics { evidenceRecorded(kind:string):void; lineageRecorded(relationship:string):void; duplicateIgnored(kind:string):void; chainVerification(valid:boolean):void; reconciliationProcessed(count:number):void; }
+export const noopAccountabilityMetrics:AccountabilityMetrics={evidenceRecorded:()=>{},lineageRecorded:()=>{},duplicateIgnored:()=>{},chainVerification:()=>{},reconciliationProcessed:()=>{}};

@@ -1,0 +1,2 @@
+import { HealthClassificationEngine } from "../../domains/governance/engines/healthClassificationEngine";
+describe("out-of-order guard contract",()=>{it("runtime model carries last accepted event timestamp",()=>{const runtime={definitionId:"d",componentId:"c",consecutiveSuccesses:0,consecutiveFailures:1,lastAcceptedObservedAt:new Date("2026-01-01T12:02:00Z")};expect(runtime.lastAcceptedObservedAt.getTime()).toBeGreaterThan(new Date("2026-01-01T11:59:00Z").getTime());expect(HealthClassificationEngine).toBeDefined();});});

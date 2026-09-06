@@ -1,0 +1,2 @@
+import { requireDomain,requireSha,requireUuid } from '../../domains/governance/validators/accountabilityValidators';
+describe('11E validators',()=>{test('accepts valid identifiers',()=>{expect(requireDomain('DOMAIN_11')).toBe('DOMAIN_11');expect(requireSha('a'.repeat(64),'sha')).toHaveLength(64);expect(requireUuid('123e4567-e89b-42d3-a456-426614174000','id')).toContain('-');});test('rejects malformed',()=>{expect(()=>requireDomain('DOMAIN_12')).toThrow();expect(()=>requireSha('x','sha')).toThrow();expect(()=>requireUuid('bananas','id')).toThrow();});});

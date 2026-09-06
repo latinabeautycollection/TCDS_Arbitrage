@@ -1,0 +1,2 @@
+import { HttpHealthProbeAdapter } from "../../domains/governance/providers/health/HttpHealthProbeAdapter";
+describe("HTTP health probe security",()=>{it("rejects a non-allowlisted host",async()=>{const adapter=new HttpHealthProbeAdapter(["internal.example.com"]);const definition:any={configuration:{url:"https://evil.example.net/health",expectedStatus:[200]},kind:"HTTP"};await expect(adapter.execute(definition,{signal:new AbortController().signal})).rejects.toThrow(/not allowlisted/i);});});
