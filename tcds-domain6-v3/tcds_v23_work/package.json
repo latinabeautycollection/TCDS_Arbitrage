@@ -9,22 +9,43 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "check": "tsc --noEmit",
     "verify:registry": "node scripts/verify-public-registry.mjs",
-    "verify": "npm run verify:registry && npm run check && npm run build"
+    "verify": "npm run verify:registry && npm run check && npm run build",
+    "scandit:sync": "node scripts/scandit/sync-scandit-runtime.mjs",
+    "scandit:version": "node scripts/scandit/generate-scandit-version.mjs",
+    "scandit:manifest": "node scripts/scandit/generate-scandit-manifest.mjs",
+    "scandit:verify-version": "node scripts/scandit/verify-scandit-version.mjs",
+    "scandit:verify-runtime": "node scripts/scandit/verify-scandit-runtime.mjs",
+    "scandit:architecture": "node scripts/scandit/verify-scandit-boundary.mjs",
+    "scandit:preflight": "npm run scandit:verify-version && npm run scandit:verify-runtime && npm run scandit:architecture",
+    "scandit:prepare": "npm run scandit:sync && npm run scandit:version && npm run scandit:manifest",
+    "scandit:lint-boundary": "eslint -c config/eslint/scandit-boundary.config.mjs \"src/**/*.{ts,tsx}\"",
+    "scandit:test": "vitest run --config config/vitest/scandit.vitest.config.ts",
+    "scandit:verify-pwa-cache": "node scripts/scandit/verify-scandit-pwa-cache.mjs",
+    "scandit:verify-dist": "node scripts/scandit/verify-scandit-dist.mjs",
+    "scandit:certify": "npm run scandit:preflight && npm run scandit:lint-boundary && npm run scandit:test && npm run build && npm run scandit:verify-dist && npm run scandit:verify-pwa-cache",
+    "prebuild": "npm run scandit:prepare && npm run scandit:preflight"
   },
   "dependencies": {
+    "@scandit/web-datacapture-barcode": "8.5.2",
+    "@scandit/web-datacapture-core": "8.5.2",
     "@vitejs/plugin-react": "4.3.4",
-    "vite": "5.4.11",
-    "typescript": "5.6.3",
+    "lucide-react": "0.468.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "6.28.0",
-    "lucide-react": "0.468.0"
+    "typescript": "5.6.3",
+    "vite": "5.4.11"
   },
   "devDependencies": {
+    "@types/node": "20.19.43",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
-    "tailwindcss": "3.4.17",
+    "@typescript-eslint/parser": "8.67.0",
+    "autoprefixer": "10.4.20",
+    "eslint": "10.8.1",
     "postcss": "8.4.49",
-    "autoprefixer": "10.4.20"
+    "tailwindcss": "3.4.17",
+    "vite-plugin-pwa": "1.3.0",
+    "vitest": "3.2.7"
   }
 }
