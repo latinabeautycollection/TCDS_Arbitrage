@@ -1,0 +1,41 @@
+# Copy/merge into repository root .github/workflows/.
+name: Domain 6.2A Scandit Certification
+
+on:
+  pull_request:
+    paths:
+      - 'tcds-domain6-v3/tcds_v23_work/src/lib/scanning/**'
+      - 'tcds-domain6-v3/tcds_v23_work/scripts/scandit/**'
+      - 'tcds-domain6-v3/tcds_v23_work/config/**'
+      - 'tcds-domain6-v3/tcds_v23_work/package.json'
+      - 'tcds-domain6-v3/tcds_v23_work/package-lock.json'
+      - 'tcds-domain6-v3/tcds_v23_work/vite.config.*'
+  push:
+    branches: [main]
+    paths:
+      - 'tcds-domain6-v3/tcds_v23_work/src/lib/scanning/**'
+      - 'tcds-domain6-v3/tcds_v23_work/scripts/scandit/**'
+      - 'tcds-domain6-v3/tcds_v23_work/config/**'
+      - 'tcds-domain6-v3/tcds_v23_work/package.json'
+      - 'tcds-domain6-v3/tcds_v23_work/package-lock.json'
+      - 'tcds-domain6-v3/tcds_v23_work/vite.config.*'
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tcds-domain6-v3/tcds_v23_work
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tcds-domain6-v3/tcds_v23_work/package-lock.json
+
+      - run: npm ci
+      - run: npm run verify --if-present
+      - run: npm run scandit:certify
