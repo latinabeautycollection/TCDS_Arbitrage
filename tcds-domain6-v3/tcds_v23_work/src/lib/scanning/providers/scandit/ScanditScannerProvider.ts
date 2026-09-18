@@ -180,19 +180,6 @@ export class ScanditScannerProvider
       return;
     }
 
-    this.unsubscribeLoading = subscribeToScanditLoading((progress) => {
-      this.setStatus(
-        {
-          phase: 'LOADING',
-          ready: false,
-          blocked: false,
-          progressPercentage: progress.percentage,
-          loadedBytes: progress.loadedBytes,
-        },
-        'LOAD_PROGRESS',
-      );
-    });
-
     this.setStatus({
       phase: 'INITIALIZING',
       ready: false,
@@ -202,6 +189,22 @@ export class ScanditScannerProvider
     });
 
     try {
+      // Subscribe inside the try block so the finally block always removes the loading
+      // subscriber, even when a runtime listener throws while a status event is delivered.
+      this.unsubscribeLoading?.();
+      this.unsubscribeLoading = subscribeToScanditLoading((progress) => {
+        this.setStatus(
+          {
+            phase: 'LOADING',
+            ready: false,
+            blocked: false,
+            progressPercentage: progress.percentage,
+            loadedBytes: progress.loadedBytes,
+          },
+          'LOAD_PROGRESS',
+        );
+      });
+
       this.context = await createScanditContext(config);
 
       this.unsubscribeContextStatus = observeScanditContextStatus(

@@ -19,7 +19,21 @@ describe("6.2B authority boundary", () => {
       }
     }
 
-    walk(root);
+    // Only the paths 6.2B ships. The production app already contains historical
+    // migrations; the 6.2B boundary script checks the 6.2B Git diff for SQL.
+    for (const owned of [
+      "src/lib/scanning/capture",
+      "src/lib/scanning/providers/scandit",
+      "src/components/scanning",
+      "src/hooks",
+      "src/pages/diagnostics",
+      "tests/scanning-6.2b",
+      "scripts/scandit",
+      "config",
+    ]) {
+      const full = path.join(root, owned);
+      if (fs.existsSync(full)) walk(full);
+    }
     expect(sql).toEqual([]);
   });
 });

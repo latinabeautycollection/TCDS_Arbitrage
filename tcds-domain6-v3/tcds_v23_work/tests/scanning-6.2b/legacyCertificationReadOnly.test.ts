@@ -12,19 +12,19 @@ describe(
     it(
       "does not wire the mutating legacy-retirement helper into the certification package script",
       () => {
-        const fragment =
+        const packageJson =
           JSON.parse(
             fs.readFileSync(
               path.resolve(
                 process.cwd(),
-                "package-fragment.json",
+                "package.json",
               ),
               "utf8",
             ),
           );
 
         expect(
-          fragment.scripts[
+          packageJson.scripts[
             "scandit:capture:certify"
           ],
         ).not.toContain(

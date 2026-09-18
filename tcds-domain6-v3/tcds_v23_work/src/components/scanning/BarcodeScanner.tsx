@@ -13,9 +13,6 @@ import {
 import {
   useBarcodeScanner,
 } from "../../hooks/useBarcodeScanner";
-import {
-  DOMAIN6_2B_CERTIFICATION_SYMBOLOGIES,
-} from "../../lib/scanning/capture/WarehouseSymbology";
 
 export function BarcodeScanner() {
   const scanner =
@@ -25,8 +22,6 @@ export function BarcodeScanner() {
     void scanner.start({
       preferredCamera:
         "WORLD_FACING",
-      symbologies:
-        DOMAIN6_2B_CERTIFICATION_SYMBOLOGIES,
       captureTimeoutMs: 60_000,
     });
   };

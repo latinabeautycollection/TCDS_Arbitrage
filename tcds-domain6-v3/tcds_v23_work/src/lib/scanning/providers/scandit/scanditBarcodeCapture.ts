@@ -1,9 +1,7 @@
 import {
-  SelectionMode,
-} from "@scandit/web-datacapture-core";
-import {
   BarcodeCapture,
   BarcodeCaptureSettings,
+  SelectionMode,
 } from "@scandit/web-datacapture-barcode";
 import type {
   DataCaptureContext,

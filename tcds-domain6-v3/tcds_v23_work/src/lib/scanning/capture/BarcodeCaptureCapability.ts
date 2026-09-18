@@ -72,7 +72,7 @@ export const DOMAIN6_2B_CERTIFICATION_POLICY:
       "CODE128",
       "EAN13_UPCA",
       "QR",
-    ]),
+    ] as const),
     duplicateFilterSeconds: -2,
     selection: "AUTOMATIC",
     scanArea: Object.freeze({

@@ -5,6 +5,7 @@
     "skipLibCheck": false
   },
   "include": [
+    "../../src/vite-env.d.ts",
     "../../src/lib/scanning/capture/**/*.ts",
     "../../src/lib/scanning/providers/scandit/**/*.ts",
     "../../src/components/scanning/**/*.tsx",

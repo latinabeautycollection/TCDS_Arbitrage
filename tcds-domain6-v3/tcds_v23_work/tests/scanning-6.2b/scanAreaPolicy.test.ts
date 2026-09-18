@@ -13,17 +13,16 @@ describe(
     it(
       "converts a centered 70 x 35 percent area into symmetric margins",
       () => {
-        expect(
+        const margins =
           scanAreaMarginsFor({
             widthFraction: 0.70,
             heightFraction: 0.35,
-          }),
-        ).toEqual({
-          left: 0.15,
-          right: 0.15,
-          top: 0.325,
-          bottom: 0.325,
-        });
+          });
+
+        expect(margins.left).toBeCloseTo(0.15, 10);
+        expect(margins.right).toBeCloseTo(0.15, 10);
+        expect(margins.top).toBeCloseTo(0.325, 10);
+        expect(margins.bottom).toBeCloseTo(0.325, 10);
       },
     );
 
