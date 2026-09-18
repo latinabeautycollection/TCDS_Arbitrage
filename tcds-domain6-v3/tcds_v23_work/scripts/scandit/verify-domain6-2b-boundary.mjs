@@ -38,6 +38,13 @@ const forbiddenAdvancedModes = [
   "MatrixScan",
 ];
 
+// Identifiers that contain an advanced-mode name but are not that mode.
+// BarcodeSelectionPolicy is the 6.2B -> 6.2C capture-policy type (automatic vs
+// explicit confirmation); it is not the Scandit Barcode Selection mode.
+const allowedIdentifiers = [
+  "BarcodeSelectionPolicy",
+];
+
 const forbiddenFeatureDirs = [
   "src/features/receiving/",
   "src/features/picking/",
@@ -164,11 +171,18 @@ for (
     }
   }
 
+  const textWithoutAllowedIdentifiers =
+    allowedIdentifiers.reduce(
+      (current, identifier) =>
+        current.replaceAll(identifier, ""),
+      text,
+    );
+
   for (
     const token of
       forbiddenAdvancedModes
   ) {
-    if (text.includes(token)) {
+    if (textWithoutAllowedIdentifiers.includes(token)) {
       violations.push(
         `${rel}: advanced Scandit mode "${token}" is outside 6.2B`,
       );

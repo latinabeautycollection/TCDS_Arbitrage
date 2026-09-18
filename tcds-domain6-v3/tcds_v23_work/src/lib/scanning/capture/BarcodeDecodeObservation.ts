@@ -16,7 +16,7 @@ export interface BarcodeDecodeObservation {
    * NEVER treat these values as:
    * - warehouse.devices.device_id
    * - warehouse.device_sessions.session_id
-   * - warehouse_control.assets.asset_id
+   * - the Warehouse Control asset_id (assets table)
    *
    * Authoritative device/session identity is supplied later by Domain 6.
    */
