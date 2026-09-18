@@ -14,8 +14,24 @@ import { mapScanditError, errorFromContextAssessment } from './scanditErrorCatal
 import { observeScanditContextStatus } from './scanditContextObserver';
 import { enrichWithScanditCompatibility } from './scanditCapabilities';
 import type { ScanditContextStatusAssessment } from './scanditContextStatusMapper';
+import type {
+  BarcodeCaptureCapability,
+  BarcodeCaptureStartOptions,
+  BarcodeCaptureStatusSource,
+  BarcodeCaptureLifecycleCapability,
+  BarcodeCaptureDeviceControls,
+} from '../../capture/BarcodeCaptureCapability';
+import type { BarcodeDecodeListener } from '../../capture/BarcodeDecodeObservation';
+import type { BarcodeCaptureStatus, BarcodeCaptureStatusListener } from '../../capture/BarcodeCaptureStatus';
+import { ScanditBarcodeCaptureController } from './ScanditBarcodeCaptureController';
 
-export class ScanditScannerProvider implements WarehouseScannerProvider {
+export class ScanditScannerProvider
+  implements
+    WarehouseScannerProvider,
+    BarcodeCaptureCapability,
+    BarcodeCaptureStatusSource,
+    BarcodeCaptureLifecycleCapability,
+    BarcodeCaptureDeviceControls {
   readonly providerId = 'scandit';
 
   private context: DataCaptureContext | null = null;
@@ -24,6 +40,9 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
   private capabilities: ScannerCapabilityReport = detectScannerCapabilities();
   private unsubscribeLoading: (() => void) | null = null;
   private unsubscribeContextStatus: (() => void) | null = null;
+  private readonly captureController = new ScanditBarcodeCaptureController(
+    () => this.context,
+  );
 
   private status: ScannerRuntimeStatus = {
     phase: 'UNINITIALIZED',
@@ -161,6 +180,19 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
       return;
     }
 
+    this.unsubscribeLoading = subscribeToScanditLoading((progress) => {
+      this.setStatus(
+        {
+          phase: 'LOADING',
+          ready: false,
+          blocked: false,
+          progressPercentage: progress.percentage,
+          loadedBytes: progress.loadedBytes,
+        },
+        'LOAD_PROGRESS',
+      );
+    });
+
     this.setStatus({
       phase: 'INITIALIZING',
       ready: false,
@@ -170,22 +202,6 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
     });
 
     try {
-      // Subscribe inside the try block so the finally block always removes the loading
-      // subscriber, even when a runtime listener throws while a status event is delivered.
-      this.unsubscribeLoading?.();
-      this.unsubscribeLoading = subscribeToScanditLoading((progress) => {
-        this.setStatus(
-          {
-            phase: 'LOADING',
-            ready: false,
-            blocked: false,
-            progressPercentage: progress.percentage,
-            loadedBytes: progress.loadedBytes,
-          },
-          'LOAD_PROGRESS',
-        );
-      });
-
       this.context = await createScanditContext(config);
 
       this.unsubscribeContextStatus = observeScanditContextStatus(
@@ -267,6 +283,8 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
       this.unsubscribeContextStatus?.();
       this.unsubscribeContextStatus = null;
 
+      await this.captureController.stop().catch(() => undefined);
+
       if (this.context) {
         await this.context.dispose();
       }
@@ -294,6 +312,60 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
         error,
       );
     }
+  }
+
+
+  async start(options: BarcodeCaptureStartOptions): Promise<void> {
+    await this.initialize();
+
+    if (!this.context || !this.getStatus().ready) {
+      throw new ScannerProviderError(
+        'SDK_RUNTIME_FAILURE',
+        'Scanner runtime is not ready for capture.',
+        true,
+        'scandit',
+      );
+    }
+
+    await this.captureController.start(options);
+  }
+
+  pause(): Promise<void> {
+    return this.captureController.pause();
+  }
+
+  resume(): Promise<void> {
+    return this.captureController.resume();
+  }
+
+  stop(): Promise<void> {
+    return this.captureController.stop();
+  }
+
+  getCaptureStatus(): BarcodeCaptureStatus {
+    return this.captureController.getStatus();
+  }
+
+  subscribeToScans(listener: BarcodeDecodeListener): () => void {
+    return this.captureController.subscribeToScans(listener);
+  }
+
+  subscribeToCaptureStatus(
+    listener: BarcodeCaptureStatusListener,
+  ): () => void {
+    return this.captureController.subscribeToStatus(listener);
+  }
+
+  suspendForBackground(): Promise<void> {
+    return this.captureController.suspendForBackground();
+  }
+
+  resumeFromBackground(): Promise<void> {
+    return this.captureController.resumeFromBackground();
+  }
+
+  setTorch(enabled: boolean): Promise<void> {
+    return this.captureController.setTorch(enabled);
   }
 
   getStatus(): ScannerRuntimeStatus {
@@ -327,8 +399,8 @@ export class ScanditScannerProvider implements WarehouseScannerProvider {
       providerName: 'Scandit Data Capture SDK',
       providerVersion: config.sdkVersion,
       runtimeAssetVersion: config.sdkVersion,
-      implementationVersion: '6.2A.2',
-      capabilities: ['RUNTIME'],
+      implementationVersion: '6.2B.1',
+      capabilities: ['RUNTIME', 'BARCODE_CAPTURE'],
       libraryLocation: config.libraryLocation,
     };
   }

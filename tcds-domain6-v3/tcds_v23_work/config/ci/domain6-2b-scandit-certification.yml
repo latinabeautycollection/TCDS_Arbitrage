@@ -1,0 +1,48 @@
+name: Domain 6.2B Scandit Capture Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: "Full 40-character production baseline SHA"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - "src/lib/scanning/**"
+      - "src/components/scanning/**"
+      - "src/hooks/useBarcodeScanner.ts"
+      - "src/pages/diagnostics/ScannerCaptureDiagnosticPage.tsx"
+      - "scripts/scandit/**"
+      - "tests/scanning-6.2b/**"
+      - "config/typescript/scandit-6.2b.tsconfig.json"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    env:
+      DOMAIN6_2B_BASELINE_SHA: ${{ github.event.pull_request.base.sha || inputs.baseline_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate baseline SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DOMAIN6_2B_BASELINE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          git cat-file -e "${DOMAIN6_2B_BASELINE_SHA}^{commit}"
+
+      - run: npm ci
+      - run: npm run scandit:capture:certify
+      - run: npm run check --if-present
+      - run: npm run verify --if-present

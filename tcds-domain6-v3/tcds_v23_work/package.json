@@ -23,7 +23,14 @@
     "scandit:verify-pwa-cache": "node scripts/scandit/verify-scandit-pwa-cache.mjs",
     "scandit:verify-dist": "node scripts/scandit/verify-scandit-dist.mjs",
     "scandit:certify": "npm run scandit:preflight && npm run scandit:lint-boundary && npm run scandit:test && npm run build && npm run scandit:verify-dist && npm run scandit:verify-pwa-cache",
-    "prebuild": "npm run scandit:prepare && npm run scandit:preflight"
+    "prebuild": "npm run scandit:prepare && npm run scandit:preflight",
+    "scandit:capture:architecture": "node scripts/scandit/verify-domain6-2b-boundary.mjs",
+    "scandit:capture:test": "vitest run --config config/vitest/scandit-6.2b.vitest.config.ts",
+    "scandit:capture:certify": "npm run scandit:certify && npm run scandit:capture:verify-sdk && npm run scandit:capture:verify-legacy && npm run scandit:capture:architecture && npm run scandit:capture:typecheck && npm run scandit:capture:test && npm run build",
+    "scandit:capture:verify-sdk": "node scripts/scandit/verify-domain6-2b-sdk-version.mjs",
+    "scandit:capture:verify-legacy": "node scripts/scandit/verify-legacy-scandit-adapter-absent.mjs",
+    "scandit:capture:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2b.tsconfig.json",
+    "scandit:capture:migrate-retire-legacy": "node scripts/scandit/retire-legacy-scandit-adapter.mjs"
   },
   "dependencies": {
     "@scandit/web-datacapture-barcode": "8.5.3",
@@ -37,12 +44,15 @@
     "vite": "5.4.11"
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "20.19.43",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "@typescript-eslint/parser": "8.67.0",
     "autoprefixer": "10.4.20",
     "eslint": "10.8.1",
+    "jsdom": "26.1.0",
     "postcss": "8.4.49",
     "tailwindcss": "3.4.17",
     "vite-plugin-pwa": "1.3.0",
