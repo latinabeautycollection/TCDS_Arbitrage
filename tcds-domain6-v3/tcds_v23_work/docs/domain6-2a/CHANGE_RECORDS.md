@@ -6,9 +6,11 @@ Slice: 6.2A Scandit Runtime Foundation
 Code commit: `090f3a8eb192faea26c79b7688d346d60bbad03e` on branch `scandit-integration`
 (it replaced an earlier local commit, never pushed, to include the approved F-01 and F-02 fixes)
 Follow-up commit: `c337eb9c67c1edc640fb25a7ce7ab093c506a05c` (certification workflow, CR-6.2A-07)
+Certification pack commit: `027fcc666afc110568d92743f85eafd3f2ad42e0` (first version of this pack; the last commit on 8.5.2)
+SDK upgrade commit: `981a7ada55a3f8876dc1fe93e1102322770dc8cb` (Scandit 8.5.3, CR-6.2A-08)
 Parent: `9846d0c`
-Final certification: `scandit:certify` exit 0 from a clean install on `090f3a8`; `npm run check` and
-`npm run verify` exit 0; 54/54 tests.
+Final certification: `scandit:certify` exit 0 from a clean install on `981a7ad` (Scandit 8.5.3,
+2026-09-18); `npm run check` and `npm run verify` exit 0; 54/54 tests.
 
 Each record below covers one material change made while merging the 6.2A package into the
 Warehouse PWA. Each change was either found during certification or requested by TCDS, and TCDS approved
@@ -153,7 +155,7 @@ each one before it was applied. Line numbers, where given, refer to `090f3a8`.
 | Affected slice | 6.2A |
 | Dependencies | GitHub Actions `actions/checkout@v4` and `actions/setup-node@v4`, and a Node.js 22 runner. See `DEPENDENCY_DISCLOSURE.md`. |
 | Change | The supplied `config/ci/domain6-2a-scandit-certification.yml` was copied, byte-identical, to `.github/workflows/`. It runs `npm ci`, `npm run verify` and `npm run scandit:certify` in `tcds-domain6-v3/tcds_v23_work`. It triggers on pull requests and on pushes to `main`, in both cases only when the 6.2A paths change. |
-| Risks | (1) A failing run blocks a merge only once `certify` is a required status check on `develop` and `main`, which a repository administrator must enable. Because the workflow is path-filtered, a required check would stay pending on pull requests that do not touch the 6.2A paths; a path-scoped rule, or removing the path filter, avoids that. (2) The path filter leaves out `tests/**` and the workflow file itself, so a test-only change does not trigger the gate. (3) Actions are referenced by major-version tags, not commit SHAs. (4) CI uses Node 22; local certification used Node 20. |
+| Risks | (1) A failing run blocks a merge only once `certify` is a required status check on `develop` and `main`, which a repository administrator must enable. Because the workflow is path-filtered, GitHub would keep a required `certify` check pending on pull requests that do not touch the 6.2A paths, and that blocks their merge. So the path filter must be removed from the `pull_request` trigger before the check is made required (a change to the workflow file, with TCDS approval); while the filter stays, the check cannot be made required without blocking other pull requests. (An earlier version of this record said a path-scoped rule avoids this. That was wrong.) (2) The path filter leaves out `tests/**` and the workflow file itself, so a test-only change does not trigger the gate. (3) Actions are referenced by major-version tags, not commit SHAs. (4) CI uses Node 22; local certification used Node 20. |
 | Compatibility impact | None on the application. No application file changed. |
 | API impact | None. |
 | Tests performed | The YAML parses (one job, `certify`; triggers `pull_request` and `push`). The workflow references no secrets. Locally, `scandit:certify` and `npm run verify` pass with `VITE_SCANDIT_LICENSE_KEY` empty, and that build contains no license key. On GitHub, the first run on PR #1 (run 35116665242, head `c337eb9`) finished **success** in 51 s: `npm ci`, `npm run verify` and `npm run scandit:certify` all passed. |
@@ -161,3 +163,25 @@ each one before it was applied. Line numbers, where given, refer to `090f3a8`.
 | Recovery considerations | Delete the workflow file. The gate stops running; nothing else changes. |
 | Effect on other Domain 6 components | None. The 6.2B and 6.2C workflow templates are separate and not installed. |
 | Approval | Requested by TCDS on 2026-09-16 for this pull request. |
+
+---
+
+## CR-6.2A-08 — Move the Scandit Web SDK to 8.5.3
+
+| Field | Record |
+|---|---|
+| Purpose | Run the whole of Milestone 1 (6.2A, 6.2B, 6.2C) on one Scandit version. The 6.2B package's certification requires exactly 8.5.3. |
+| Affected components | `package.json`, `package-lock.json`, `src/lib/scanning/providers/scandit/scanditVersion.ts` (generated), `docs/SCANDIT_VERSION_APPROVAL.md`. Commit `981a7ad`. |
+| Requirement or defect | TCDS decision (2026-09-18): upgrade to 8.5.3 as its own commit in this pull request and repeat the complete 6.2A certification. The 6.2B package pins 8.5.3: `scripts/scandit/verify-domain6-2b-sdk-version.mjs` (`EXPECTED = "8.5.3"`) and `PACKAGE_MANIFEST.json` (`scanditWebTarget`). What in 6.2B needs 8.5.3 is recorded in `CERTIFICATION_FINDINGS.md`, section "Scandit 8.5.3 and 6.2B". |
+| Affected slice | 6.2A. 6.2B and 6.2C use the same Scandit version. |
+| Dependencies | `@scandit/web-datacapture-core` and `@scandit/web-datacapture-barcode` 8.5.3. See `DEPENDENCY_DISCLOSURE.md`. |
+| Change | Both packages moved from 8.5.2 to exactly 8.5.3 together (`npm install --save-exact`). Only the two Scandit entries changed in the lockfile. `scanditVersion.ts` was regenerated by `scandit:version`. The approval record gained an 11-step update record. No hand-written source or test file changed; only the generated `scanditVersion.ts` was rebuilt. |
+| Risks | (1) The deployed app loads the runtime from `/scandit/8.5.3/`, so the hosted route needs that folder before the new build is deployed. TCDS staged it from our build on 2026-09-18 and keeps 8.5.2 beside it. (2) Some test fixtures still use `8.5.2` as sample values (a mocked version constant, sample URLs, sample provider metadata, a comment). They do not read the installed version, so they are unaffected. (3) The runtime content fingerprint changes, because the barcode engine build changed. |
+| Compatibility impact | No API change: all 571 TypeScript declaration files in both packages are identical between 8.5.2 and 8.5.3. The barcode engine and worker files changed. The only behaviour change in Scandit's 8.5.3 release notes applies to MatrixScan modes; 6.2A creates no capture mode, and the 6.2B boundary script forbids MatrixScan. |
+| API impact | None. |
+| Tests performed | From a clean install on 2026-09-18: `npm ci` and `scandit:prepare` exit 0; `scandit:certify` exit 0 (version parity PASS, runtime PASS with 44 files, 4 WASM, 5 JS, boundary PASS, 54/54 tests, build, verify-dist PASS, verify-pwa-cache PASS); `dist/sw.js` has 45 entries under `/scandit/8.5.3/` and none under `/scandit/8.5.2/`; `npm run check` and `npm run verify` exit 0. Rollback: the 8.5.2 `package.json` and `package-lock.json` restored from `027fcc6` (the last commit on 8.5.2), clean install and full certification exit 0 (fingerprint unchanged), then forward to 8.5.3 again, exit 0. `npm audit` unchanged. Runtime content fingerprint (8.5.3): `0d62034520f2f6fe989e0cee61c1900269ab07fd90058ea96906b5142e36d675`. CI: run 35368516071 on `981a7ad` (8.5.3) passed in 49 s: `npm ci`, `npm run verify`, `npm run scandit:certify`. HTTPS check of the hosted `/scandit/8.5.3/` (2026-09-18): 44/44 files pass (status, size, type, `nosniff`, sha256 against our build, immutable cache; `.wasm` served as `application/wasm`); the served manifest is byte-identical to our build; missing files return 404 with no cache header. |
+| Configuration impact | The runtime path becomes `/scandit/8.5.3/`, and the service worker precaches 45 entries there. No new environment variable. |
+| Recovery considerations | Restore the 8.5.2 `package.json`/`package-lock.json` pair (or revert `981a7ad`), then `npm ci`, `scandit:prepare` and `scandit:certify`. Proven on 2026-09-18. The hosted 8.5.2 runtime stays available (HTTPS check 44/44 on 2026-09-18). |
+| Effect on other Domain 6 components | None outside the Scandit runtime. |
+| Approval | Decided by TCDS on 2026-09-18: all of Milestone 1 (6.2A, 6.2B, 6.2C) uses Scandit 8.5.3. |
+

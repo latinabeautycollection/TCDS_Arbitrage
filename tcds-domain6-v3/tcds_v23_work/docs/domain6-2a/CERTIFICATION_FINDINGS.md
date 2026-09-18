@@ -4,7 +4,11 @@ Code reviewed for F-01 to F-05: the first local 6.2A commit `9653cc3` (never pus
 `090f3a8` without CR-6.2A-05 and CR-6.2A-06). Line numbers and code quotes in F-01, F-02 and F-05
 refer to that version, before the fixes.
 Fixes committed in: `090f3a8eb192faea26c79b7688d346d60bbad03e` (the 6.2A code commit)
-Scandit Web SDK: 8.5.2
+Scandit Web SDK: 8.5.2 at review time. The project moved to 8.5.3 on 2026-09-18 (CR-6.2A-08). All
+TypeScript declaration files are identical between the two versions. In the core package, only the
+version string, `package.json` and three internal UI button modules changed, so the core code behind
+F-01, F-03 and F-04 (loading status, context status, the camera-access-error handler) is the same.
+The findings are unchanged.
 
 These findings come from reviewing the merged 6.2A source against the **real** Scandit 8.5.2
 type definitions and shipped JavaScript, not against the test mocks. They were found after
@@ -169,8 +173,8 @@ follow the no-raw-external-payloads rule as strictly as `cause` now does.
 **Proposed fix (not applied):** export the F-02 redactor from `ScannerProviderError.ts` and use
 it inside `safeMessage()`. One small change in the mapper, which 6.2B and 6.2C do not ship.
 
-**TCDS decision (2026-09-16):** acceptable for 6.2A; keep it as-is and document it, and tighten it
-only if QA flags it. Kept as-is.
+**TCDS decision (2026-09-16):** accepted for 6.2A without a code change and documented here; to be
+revisited only if QA raises it. Kept as-is.
 
 ---
 
@@ -184,6 +188,42 @@ error object, against the F-02 rule.
 **Recommendation:** decide before 6.2B certification whether the F-02 rule applies to 6.2B. If it
 does, reuse `sanitizeProviderErrorCause` in `BarcodeCaptureError`. That is a small change in
 one 6.2B file, applied inside the 6.2B commit.
+
+---
+
+## Scandit 8.5.3 and 6.2B (2026-09-18)
+
+On 2026-09-18 TCDS asked us to document which 6.2B APIs or types depend on 8.5.3. **Result: no 6.2B API or type requires
+8.5.3.** The requirement comes from the 6.2B package's version gate, not from its code.
+
+- **Symbols 6.2B uses.** From `@scandit/web-datacapture-core`: `Camera`, `CameraPosition`,
+  `DataCaptureContext`, `DataCaptureView`, `FrameSourceListener`, `FrameSourceState`,
+  `MarginsWithUnit`, `MeasureUnit`, `NumberWithUnit`, `PointWithUnit`, `SelectionMode`, `TorchState`.
+  From `@scandit/web-datacapture-barcode`: `BarcodeCapture`, `BarcodeCaptureListener`,
+  `BarcodeCaptureSession`, `BarcodeCaptureSettings`, `Symbology`.
+- **Type declarations.** All 571 `.d.ts` files in both packages are byte-identical between 8.5.2 and
+  8.5.3, so each of these symbols has the same declaration in both versions.
+- **Files that changed (other than type declarations).** Barcode package: the engine (4 `sdc-lib`
+  JS and 4 WASM files), the worker file (renamed `barcode-worker-8.5.3.js`), the worker and loader
+  JavaScript (`moduleLoader.js`, `worker/BarcodeCaptureWorkerManager.js`,
+  `worker/dataCaptureEngine.js`, and one hashed `BarcodeCaptureWorkerManager-*.js` chunk with a new
+  name), and `package.json`. Core package: the SDK version string, `package.json`, and three
+  internal UI button modules (camera switch, camera field-of-view switch, torch switch). 6.2B does
+  not add Scandit's built-in UI controls. License files are unchanged.
+- **Scandit release notes.** 8.5.3 (released 2026-08-18) lists one behaviour change: enhanced
+  low-resolution QR scanning is disabled for MatrixScan modes. 6.2B uses `BarcodeCapture` only, and
+  its boundary script forbids MatrixScan.
+- **Where the requirement is.** `scripts/scandit/verify-domain6-2b-sdk-version.mjs` expects exactly
+  `8.5.3` in `package.json`, `package-lock.json` and the installed packages, and
+  `scandit:capture:certify` runs it. `PACKAGE_MANIFEST.json` sets `scanditWebTarget` to `8.5.3`.
+  6.2C inherits the gate, because `scandit:policy:certify` runs `scandit:capture:certify` first.
+  `docs/PRODUCTION_HARDENING_FINAL.md` also requires both packages at exactly 8.5.3, and the
+  README's revision note pins the SDK contract to 8.5.3. Only the README header (line 5) still
+  says 8.5.2.
+
+So 8.5.3 is a version-policy requirement of the 6.2B package, not an API dependency. The 6.2B gate
+looks for exactly 8.5.3 in `package.json`, `package-lock.json` and the installed packages; all three
+were confirmed on 2026-09-18 with no code change. The gate itself runs when 6.2B is merged.
 
 ---
 
@@ -219,6 +259,8 @@ committed files intentionally differ from it:
 | `tests/scanning/ScanditScannerProvider.test.ts` | CR-6.2A-05 and CR-6.2A-06 |
 | `tests/scanning/scanditErrorCatalog.test.ts` | CR-6.2A-06 |
 | `tests/scanning/scannerProviderError.test.ts` (new) | CR-6.2A-06 |
+| `src/lib/scanning/providers/scandit/scanditVersion.ts` | CR-6.2A-08 (regenerated for 8.5.3) |
+| `docs/SCANDIT_VERSION_APPROVAL.md` | CR-6.2A-08 |
 
 No script verifies source files against the package manifest, so these differences do not
 affect any certification gate.
@@ -227,5 +269,5 @@ affect any certification gate.
 
 ## Dependency vulnerabilities (`npm audit`)
 
-6.2A introduced no advisory into the production dependency set. It introduced one moderate,
+6.2A introduced no advisory into the production dependency set (re-checked on Scandit 8.5.3, 2026-09-18). It introduced one moderate,
 development-only advisory (`vitest` / `@vitest/mocker`). Details: `DEPENDENCY_DISCLOSURE.md`.

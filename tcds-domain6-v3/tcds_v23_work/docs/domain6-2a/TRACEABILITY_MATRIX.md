@@ -2,7 +2,8 @@
 
 Links each 6.2A requirement to code, tests and evidence.
 Commits: `090f3a8eb192faea26c79b7688d346d60bbad03e` (6.2A code, including F-01/F-02),
-`c337eb9c67c1edc640fb25a7ce7ab093c506a05c` (certification workflow)
+`c337eb9c67c1edc640fb25a7ce7ab093c506a05c` (certification workflow),
+`981a7ada55a3f8876dc1fe93e1102322770dc8cb` (Scandit 8.5.3)
 
 Paths are relative to `tcds-domain6-v3/tcds_v23_work/`, except `.github/`, which is at the repository
 root. Short names such as `contracts/…` and `runtime/…` are under `src/lib/scanning/`; `scandit*` files
@@ -13,7 +14,7 @@ Status: **Met** · **Partial** (implemented; one step outside the code remains) 
 
 ---
 
-## A. Milestone 1 — Runtime Foundation
+## A. 6.2A runtime foundation requirements (part of Milestone 1)
 
 | ID | Requirement | Code | Tests | Evidence | Status |
 |---|---|---|---|---|---|
@@ -34,26 +35,26 @@ Status: **Met** · **Partial** (implemented; one step outside the code remains) 
 
 | Pt | Requirement | Implementation / evidence | Status |
 |---|---|---|---|
-| 1 | Version fixed at 8.5.2 across core, barcode, lockfile, sdc-lib, manifest | Parity PASS; manifest `sdkVersion` 8.5.2 | Met |
+| 1 | Version fixed at 8.5.2 across core, barcode, lockfile, sdc-lib, manifest | Parity PASS. Moved to 8.5.3 on 2026-09-18 by TCDS decision (CR-6.2A-08); parity PASS on 8.5.3 across core, barcode, lockfile, `sdc-lib` and manifest | Met (8.5.3) |
 | 2 | Keep `/sw.js` registration | `src/main.tsx` unchanged; `injectRegister: null` | Met |
 | 3 | Replace placeholder `sw.js` only if needed | Removed; generated worker replaces it — CR-6.2A-03 | Met |
 | 4 | `vite-plugin-pwa`; keep existing manifest | `manifest: false` | Met |
-| 5 | Cache runtime and manifest under `/scandit/8.5.2/` | 45 precache entries | Met |
-| 6 | Max precache size ≥ largest runtime file, target 10 MB | 10 MB; largest 7.17 MB | Met |
+| 5 | Cache runtime and manifest under `/scandit/8.5.2/` | 45 precache entries; under `/scandit/8.5.3/` since 2026-09-18 | Met (8.5.3) |
+| 6 | Max precache size ≥ largest runtime file, target 10 MB | 10 MiB; largest 7.17 MiB (8.5.2 and 8.5.3) | Met |
 | 7 | No unrelated precache | `globPatterns: []`; 0 `/assets/`, 0 `index.html` | Met |
 | 8 | No forced reload | `registerType: 'prompt'`; `skipWaiting` only on message | Met |
 | 9 | `verify-pwa-cache` validates outcome | Already inspects built worker; no change needed | Met |
 | 10 | Clean build from scratch | `rm -rf node_modules public/scandit dist`; `npm ci` | Met |
 | 11 | Strict chain in order | `scandit:prepare` (sync → version → manifest) → preflight (verify-version → verify-runtime → boundary) → lint-boundary → tests → build (`tsc` + vite) → verify-dist → verify-pwa-cache. All TCDS-listed gates run; any failure stops the chain | Met |
 | 12 | PWA cache certification | `scandit:verify-pwa-cache` PASS | Met |
-| 13 | HTTPS asset smoke tests | TCDS added a static `location ^~ /scandit/` route (2026-09-15). HTTPS check: all 44 files return 200 with 0 redirects, correct type (`application/wasm` for all 4 WASM files), `content-length` matching the manifest, sha256 matching the manifest, `nosniff` and `immutable`. The manifest reports 8.5.2, both packages and 44 hashes, and is byte-identical to the certified build. Missing files return 404. Evidence: `6.2a-https-check.txt` | Met |
-| 14 | Browser runtime diagnostic | 6.2A contains no UI. TCDS decision (2026-09-16): N/A for 6.2A; runs in the consuming UI slice (6.2B) | N/A |
-| 15 | Domain 6 regression tests | TCDS decision (2026-09-16): for a no-UI slice the automated suite is the regression surface (54/54, verify-dist, verify-pwa-cache, build, upgrade/rollback). `check` and `verify` exit 0; light HTTP smoke of the built app passed | Met |
+| 13 | HTTPS asset smoke tests | TCDS added a static `location ^~ /scandit/` route (2026-09-15). HTTPS check: all 44 files return 200 with 0 redirects, correct type (`application/wasm` for all 4 WASM files), `content-length` matching the manifest, sha256 matching the manifest, `nosniff` and `immutable`. The manifest reports 8.5.2, both packages and 44 hashes, and is byte-identical to the certified build. Missing files return 404. Evidence: `6.2a-https-check.txt`. Re-run on 8.5.3 (2026-09-18, after TCDS staged it from our build): 44/44 pass with the same checks, `application/wasm` for all 4 WASM files, the served manifest byte-identical to our build (content fingerprint `0d620345…`), missing files 404 with no cache header; 8.5.2 still served (44/44) | Met (8.5.2 and 8.5.3) |
+| 14 | Browser runtime diagnostic | 6.2A has no screens. TCDS decided on 2026-09-16 that this point does not apply to 6.2A; it runs in 6.2B, which adds the scanner screen | N/A |
+| 15 | Domain 6 regression tests | TCDS decided on 2026-09-16 that, because 6.2A has no screens, its automated checks serve as its regression tests (54/54, verify-dist, verify-pwa-cache, build, upgrade/rollback). `check` and `verify` exit 0 on 8.5.2 and on 8.5.3 (2026-09-18); light HTTP smoke of the built app passed (2026-09-16, on 8.5.2) | Met |
 | 16 | Architecture boundary intact | Boundary script, ESLint and test PASS | Met |
 | 17 | Zero warehouse business operations | Source greps for camera, permission, capture, decode, network, storage, database all 0 | Met |
-| 18 | Upgrade and rollback | 8.5.2 → 8.5.3 → 8.5.2, certify exit 0 both ways (rehearsed 2026-09-11; later changes touched no dependencies) | Met |
-| 19 | Final certify after all gates | Exit 0 from a clean install on `090f3a8`; point 13 passed; point 14 N/A; point 15 met; CI gate installed (`c337eb9`) | Met |
-| 20 | 6.2A corrections committed together, evidence in PR | `090f3a8` holds all 6.2A code corrections, including the approved F-01 and F-02 fixes. Follow-up commits add the CI workflow and this pack. Pushed; PR #1 open with the evidence summary | Met — awaiting TCDS review |
+| 18 | Upgrade and rollback | Rehearsed 8.5.2 → 8.5.3 → 8.5.2 on 2026-09-11. Real upgrade to 8.5.3 on 2026-09-18 (CR-6.2A-08); rollback to 8.5.2 and forward again re-proven on the current code, certify exit 0 each time | Met |
+| 19 | Final certify after all gates | Exit 0 from a clean install on `981a7ad` (8.5.3, 2026-09-18); earlier on `090f3a8` (8.5.2); point 13 passed on 8.5.2 (2026-09-15) and on 8.5.3 (2026-09-18); point 14 N/A; point 15 met; CI gate installed (`c337eb9`) and passed on 8.5.3 (run 35368516071) | Met |
+| 20 | 6.2A corrections committed together, evidence in PR | `090f3a8` holds all 6.2A code corrections, including the approved F-01 and F-02 fixes. Follow-up commits add the CI workflow (`c337eb9`) and this pack (`027fcc6`), then move the SDK to 8.5.3 (`981a7ad`) and update this pack. Pushed; PR #1 open with the evidence summary | Met — awaiting TCDS review |
 
 ---
 
@@ -68,6 +69,7 @@ Status: **Met** · **Partial** (implemented; one step outside the code remains) 
 | CR-6.2A-05 | Remove loading subscriber with the same function (F-01) | `scanditLoadingObserver.ts`, `ScanditScannerProvider.ts`, provider tests | M1-08; checklist lifecycle item |
 | CR-6.2A-06 | Keep only a redacted summary in `cause` (F-02) | `contracts/ScannerProviderError.ts`, new sanitization tests, catalog test, provider test | M1-07; checklist raw-exception item |
 | CR-6.2A-07 | Install the certification workflow | `.github/workflows/domain6-2a-scandit-certification.yml` (repository root) | Checklist CI/CD item; TCDS request 2026-09-16 |
+| CR-6.2A-08 | Move the Scandit Web SDK to 8.5.3 | `package.json`, `package-lock.json`, `scanditVersion.ts`, `docs/SCANDIT_VERSION_APPROVAL.md` | Points 1, 5, 6, 13, 18, 19; TCDS decision 2026-09-18 |
 
 ---
 
@@ -80,7 +82,7 @@ Status: **Met** · **Partial** (implemented; one step outside the code remains) 
 | F-03 | Status codes normalized through deterministic mappings — correct for 6.2A, not for camera errors in 6.2B | M1-07 | Open — before 6.2B |
 | F-04 | Recovery back to Success is observable — confirm success code on real device | M1-06 | Moved to 6.2B with the browser diagnostic |
 | F-05 | Automated testing — mock fidelity | M1-09 | Resolved — part of CR-6.2A-05 |
-| F-06 | Error handling — `ContextStatus` message redaction | M1-07 | Accepted as-is for 6.2A (TCDS); tighten only if QA flags it |
+| F-06 | Error handling — `ContextStatus` message redaction | M1-07 | Accepted for 6.2A (TCDS, 2026-09-16); revisit only if QA raises it |
 | F-07 | None in 6.2A (6.2B `BarcodeCaptureError.cause` raw errors) | 6.2B | Open — before 6.2B |
 
 ---
@@ -89,4 +91,4 @@ Status: **Met** · **Partial** (implemented; one step outside the code remains) 
 
 | Item | Status | Owner |
 |---|---|---|
-| Checklist CI/CD item "Production promotion is impossible if any Scandit certification gate fails" | Partial — workflow installed and its first run passed; `certify` is not yet a required status check on `develop` and `main` | TCDS repository administrator |
+| Checklist CI/CD item "Production promotion is impossible if any Scandit certification gate fails" | Partial — workflow installed; its runs on PR #1 passed (35116665242 and 35118247518 on 8.5.2, 35368516071 on 8.5.3); `certify` is not yet a required status check on `develop` and `main`. The workflow is path-filtered, so the `pull_request` path filter must be removed before the check can be made required without blocking other pull requests | TCDS repository administrator |
