@@ -1,0 +1,1 @@
+export { ScanditScannerProvider } from './ScanditScannerProvider';
