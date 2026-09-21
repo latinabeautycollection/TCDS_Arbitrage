@@ -5,6 +5,9 @@ import {
   ScannerPermissionGate,
 } from "./ScannerPermissionGate";
 import {
+  ScannerRuntimeDiagnostics,
+} from "./ScannerRuntimeDiagnostics";
+import {
   ScannerStatus,
 } from "./ScannerStatus";
 import {
@@ -14,21 +17,33 @@ import {
   useBarcodeScanner,
 } from "../../hooks/useBarcodeScanner";
 
+// Lifecycle failures are already reported through the capture status surface, so
+// the rejection is absorbed here. Nothing raw reaches an unhandled rejection.
+function absorb(
+  operation: Promise<void>,
+): void {
+  void operation.catch(
+    () => undefined,
+  );
+}
+
 export function BarcodeScanner() {
   const scanner =
     useBarcodeScanner();
 
   const start = () => {
-    void scanner.start({
-      preferredCamera:
-        "WORLD_FACING",
-      captureTimeoutMs: 60_000,
-    });
+    absorb(
+      scanner.start({
+        preferredCamera:
+          "WORLD_FACING",
+        captureTimeoutMs: 60_000,
+      }),
+    );
   };
 
   const resume = () => {
     scanner.clearObservation();
-    void scanner.resume();
+    absorb(scanner.resume());
   };
 
   return (
@@ -87,11 +102,23 @@ export function BarcodeScanner() {
         onStart={start}
         onResume={resume}
         onStop={() => {
-          void scanner.stop();
+          absorb(scanner.stop());
         }}
         onTorch={(enabled) => {
-          void scanner.setTorch(enabled);
+          absorb(
+            scanner.setTorch(enabled),
+          );
         }}
+      />
+
+      <ScannerRuntimeDiagnostics
+        capture={scanner.status}
+        runtime={
+          scanner.runtimeStatus
+        }
+        metadata={
+          scanner.providerMetadata
+        }
       />
 
       <p className="text-xs text-slate-400">

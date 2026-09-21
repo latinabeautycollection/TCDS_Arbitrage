@@ -1,8 +1,12 @@
 import {
   BarcodeCapture,
+  BarcodeCaptureFeedback,
   BarcodeCaptureSettings,
   SelectionMode,
 } from "@scandit/web-datacapture-barcode";
+import {
+  Feedback,
+} from "@scandit/web-datacapture-core";
 import type {
   DataCaptureContext,
 } from "@scandit/web-datacapture-core";
@@ -39,8 +43,29 @@ export async function createScanditBarcodeCapture(
       ? SelectionMode.On
       : SelectionMode.Off;
 
-  return BarcodeCapture.forContext(
-    context,
-    settings,
+  const capture =
+    await BarcodeCapture.forContext(
+      context,
+      settings,
+    );
+
+  // The SDK creates the mode already enabled and armed with its own success
+  // feedback. Capture stays disabled until the controller reaches CAPTURING, so
+  // a barcode that is already in view while the camera starts cannot decode
+  // early or break Start.
+  await capture.setEnabled(false);
+
+  // The TCDS capture policy is the only feedback authority. The SDK's own beep
+  // and vibration are cleared so nothing can emit outside that policy.
+  const feedback =
+    BarcodeCaptureFeedback.default;
+
+  feedback.success = new Feedback(
+    null,
+    null,
   );
+
+  await capture.setFeedback(feedback);
+
+  return capture;
 }

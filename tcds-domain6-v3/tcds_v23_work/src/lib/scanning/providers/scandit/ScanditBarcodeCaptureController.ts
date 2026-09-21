@@ -33,6 +33,9 @@ import {
 import {
   assertCaptureTransition,
 } from "../../capture/captureStateMachine";
+import {
+  sanitizeProviderErrorCause,
+} from "../../contracts/ScannerProviderError";
 
 import {
   createScanditBarcodeCapture,
@@ -62,6 +65,21 @@ import {
 } from "./captureFeedbackExecutor";
 
 type ContextProvider = () => DataCaptureContext | null;
+
+// Cleanup records are diagnostics that leave the provider. The raw SDK message
+// is redacted first so no provider internals or credentials travel with them.
+function cleanupFailureMessage(
+  error: unknown,
+  fallback: string,
+): string {
+  const sanitized =
+    sanitizeProviderErrorCause(error)
+      ?.message;
+
+  return sanitized && sanitized.length
+    ? sanitized
+    : fallback;
+}
 
 export class ScanditBarcodeCaptureController {
   private capture: BarcodeCapture | null = null;
@@ -135,8 +153,11 @@ export class ScanditBarcodeCaptureController {
     return this.enqueue(async () => {
       if (
         this.status.phase === "STOPPED" ||
-        this.status.phase === "IDLE"
+        this.status.phase === "IDLE" ||
+        this.isUnrecoverablePhase()
       ) {
+        // A failed or blocked scanner has nothing to suspend, and must not be
+        // recorded as merely background-suspended.
         return;
       }
 
@@ -180,8 +201,11 @@ export class ScanditBarcodeCaptureController {
     return this.enqueue(async () => {
       if (
         !this.status.backgroundSuspended ||
-        !this.startOptions
+        !this.startOptions ||
+        this.isUnrecoverablePhase()
       ) {
+        // Returning to the foreground is not a recovery. A failed or blocked
+        // scanner becomes READY again only through a successful restart.
         return;
       }
 
@@ -289,13 +313,13 @@ export class ScanditBarcodeCaptureController {
       );
     }
 
+    // Every phase except IDLE/STOPPED can still own a camera, a capture mode, a
+    // listener or an attached view. Error phases included: a retry after a
+    // timeout or a failure must never build a second session on top of the old
+    // one.
     if (
       this.status.phase !== "IDLE" &&
-      this.status.phase !== "STOPPED" &&
-      this.status.phase !== "PERMISSION_DENIED" &&
-      this.status.phase !== "CAMERA_UNAVAILABLE" &&
-      this.status.phase !== "CAMERA_ERROR" &&
-      this.status.phase !== "CAPTURE_ERROR"
+      this.status.phase !== "STOPPED"
     ) {
       await this.stopInternal();
     }
@@ -698,9 +722,10 @@ export class ScanditBarcodeCaptureController {
         failures.push({
           step: "DISABLE_CAPTURE",
           message:
-            error instanceof Error
-              ? error.message
-              : "Capture disable failed.",
+            cleanupFailureMessage(
+              error,
+              "Capture disable failed.",
+            ),
         });
       }
     }
@@ -712,9 +737,10 @@ export class ScanditBarcodeCaptureController {
         failures.push({
           step: "STOP_CAMERA",
           message:
-            error instanceof Error
-              ? error.message
-              : "Camera stop failed.",
+            cleanupFailureMessage(
+              error,
+              "Camera stop failed.",
+            ),
         });
       }
     }
@@ -732,9 +758,10 @@ export class ScanditBarcodeCaptureController {
           step:
             "REMOVE_CAPTURE_LISTENER",
           message:
-            error instanceof Error
-              ? error.message
-              : "Capture listener removal failed.",
+            cleanupFailureMessage(
+              error,
+              "Capture listener removal failed.",
+            ),
         });
       }
     }
@@ -746,9 +773,10 @@ export class ScanditBarcodeCaptureController {
         failures.push({
           step: "DETACH_VIEW",
           message:
-            error instanceof Error
-              ? error.message
-              : "View detach failed.",
+            cleanupFailureMessage(
+              error,
+              "View detach failed.",
+            ),
         });
       }
     }
@@ -760,9 +788,10 @@ export class ScanditBarcodeCaptureController {
         failures.push({
           step: "CLEAR_FRAME_SOURCE",
           message:
-            error instanceof Error
-              ? error.message
-              : "Frame source clear failed.",
+            cleanupFailureMessage(
+              error,
+              "Frame source clear failed.",
+            ),
         });
       }
 
@@ -775,9 +804,10 @@ export class ScanditBarcodeCaptureController {
           failures.push({
             step: "REMOVE_MODE",
             message:
-              error instanceof Error
-                ? error.message
-                : "Capture mode removal failed.",
+              cleanupFailureMessage(
+                error,
+                "Capture mode removal failed.",
+              ),
           });
         }
       }
@@ -789,9 +819,10 @@ export class ScanditBarcodeCaptureController {
       failures.push({
         step: "REMOVE_CAMERA_LISTENER",
         message:
-          error instanceof Error
-            ? error.message
-            : "Camera state listener removal failed.",
+          cleanupFailureMessage(
+            error,
+            "Camera state listener removal failed.",
+          ),
       });
     }
 
@@ -828,6 +859,24 @@ export class ScanditBarcodeCaptureController {
     observation: BarcodeDecodeObservation,
     capture: BarcodeCapture,
   ): Promise<void> {
+    // A decode can still arrive from a previous session, or before this session
+    // reaches CAPTURING. Neither may drive the state machine.
+    if (capture !== this.capture) {
+      try {
+        await capture.setEnabled(false);
+      } catch {
+        // A stale mode that cannot be disabled is already being released.
+      }
+
+      return;
+    }
+
+    if (
+      this.status.phase !== "CAPTURING"
+    ) {
+      return;
+    }
+
     if (this.scanHandling) return;
     this.scanHandling = true;
 
@@ -989,6 +1038,20 @@ export class ScanditBarcodeCaptureController {
       lastErrorCode: error.code,
       message: error.message,
     });
+  }
+
+  private isUnrecoverablePhase(): boolean {
+    return (
+      this.status.phase ===
+        "PERMISSION_DENIED" ||
+      this.status.phase ===
+        "CAMERA_UNAVAILABLE" ||
+      this.status.phase ===
+        "CAMERA_ERROR" ||
+      this.status.phase ===
+        "CAPTURE_ERROR" ||
+      this.status.phase === "BLOCKED"
+    );
   }
 
   private transition(

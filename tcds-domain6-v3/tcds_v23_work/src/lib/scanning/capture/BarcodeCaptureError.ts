@@ -1,3 +1,8 @@
+import {
+  sanitizeProviderErrorCause,
+  type ScannerProviderErrorCause,
+} from "../contracts/ScannerProviderError";
+
 export type BarcodeCaptureErrorCode =
   | "RUNTIME_NOT_READY"
   | "VIEWPORT_REQUIRED"
@@ -34,14 +39,36 @@ export interface CaptureCleanupFailure {
 }
 
 export class BarcodeCaptureError extends Error {
+  /**
+   * Redacted summary only, produced by the 6.2A provider-error sanitizer. The
+   * raw SDK or DOM exception is never retained, so provider internals, license
+   * data and SDK stack traces cannot cross the capture boundary. The TCDS code,
+   * message, retryability and cleanup steps carry the diagnostic meaning.
+   */
+  declare readonly cause?: ScannerProviderErrorCause;
+
   constructor(
     public readonly code: BarcodeCaptureErrorCode,
     message: string,
     public readonly retryable: boolean,
-    public readonly cause?: unknown,
+    cause?: unknown,
     public readonly cleanupFailures?: readonly CaptureCleanupFailure[],
   ) {
     super(message);
     this.name = "BarcodeCaptureError";
+
+    Object.defineProperty(
+      this,
+      "cause",
+      {
+        value:
+          sanitizeProviderErrorCause(
+            cause,
+          ),
+        enumerable: true,
+        writable: false,
+        configurable: false,
+      },
+    );
   }
 }

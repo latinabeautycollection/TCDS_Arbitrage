@@ -21,10 +21,18 @@ import type {
 import type {
   BarcodeCaptureStatus,
 } from "../lib/scanning/capture/BarcodeCaptureStatus";
+import type {
+  ScannerProviderMetadata,
+} from "../lib/scanning/contracts/ScannerProviderMetadata";
+import type {
+  ScannerRuntimeStatus,
+} from "../lib/scanning/contracts/ScannerRuntimeStatus";
 
 export interface UseBarcodeScannerResult {
   viewportRef: (node: HTMLDivElement | null) => void;
   status: BarcodeCaptureStatus;
+  runtimeStatus: ScannerRuntimeStatus;
+  providerMetadata: ScannerProviderMetadata | null;
   observation: BarcodeDecodeObservation | null;
   start: (
     options?: Omit<
@@ -56,6 +64,11 @@ export function useBarcodeScanner():
     useRef<HTMLDivElement | null>(null);
 
   const ownsSession = useRef(false);
+
+  // Set when the consumer unmounts. A start that is still queued or in flight
+  // checks this before it attaches anything else to the page.
+  const released = useRef(false);
+
   const lifecycleOperation =
     useRef<Promise<void>>(
       Promise.resolve(),
@@ -67,6 +80,25 @@ export function useBarcodeScanner():
   ] = useState(
     runtime.getCaptureStatus(),
   );
+
+  const [
+    runtimeStatus,
+    setRuntimeStatus,
+  ] = useState<ScannerRuntimeStatus>(
+    () => runtime.getStatus(),
+  );
+
+  const providerMetadata =
+    useMemo<ScannerProviderMetadata | null>(
+      () => {
+        try {
+          return runtime.getMetadata();
+        } catch {
+          return null;
+        }
+      },
+      [runtime],
+    );
 
   const [
     observation,
@@ -92,6 +124,8 @@ export function useBarcodeScanner():
   );
 
   useEffect(() => {
+    released.current = false;
+
     const unsubscribeStatus =
       runtime.subscribeToCaptureStatus(
         setStatus,
@@ -102,18 +136,35 @@ export function useBarcodeScanner():
         setObservation,
       );
 
+    const unsubscribeRuntime =
+      runtime.subscribe((event) =>
+        setRuntimeStatus(event.status),
+      );
+
+    setRuntimeStatus(
+      runtime.getStatus(),
+    );
+
     return () => {
+      released.current = true;
+
       unsubscribeStatus();
       unsubscribeScans();
+      unsubscribeRuntime();
 
-      if (ownsSession.current) {
-        void enqueueLifecycle(
-          async () => {
-            await runtime.stop();
-            ownsSession.current = false;
-          },
-        );
-      }
+      // Ownership is claimed inside the queued start, so a start that has not
+      // resolved yet is also released here: the queued release runs after it and
+      // stops the camera, removes listeners and detaches the view.
+      void enqueueLifecycle(
+        async () => {
+          if (!ownsSession.current) {
+            return;
+          }
+
+          await runtime.stop();
+          ownsSession.current = false;
+        },
+      );
     };
   }, [runtime, enqueueLifecycle]);
 
@@ -203,17 +254,41 @@ export function useBarcodeScanner():
 
       return enqueueLifecycle(
         async () => {
+          if (released.current) {
+            // The consumer is gone. Nothing is attached, so nothing to release.
+            return;
+          }
+
+          const viewportElement =
+            viewport.current;
+
+          if (!viewportElement) {
+            return;
+          }
+
+          // Ownership is claimed before the first await so an unmount during
+          // startup always releases this session.
+          ownsSession.current = true;
+
           // The provider itself also initializes defensively. Calling initialize
           // here makes the PWA dependency explicit and deterministic.
           await runtime.initialize();
 
+          if (released.current) {
+            await runtime.stop();
+            ownsSession.current = false;
+            return;
+          }
+
           await runtime.start({
             ...options,
-            viewportElement:
-              viewport.current!,
+            viewportElement,
           });
 
-          ownsSession.current = true;
+          if (released.current) {
+            await runtime.stop();
+            ownsSession.current = false;
+          }
         },
       );
     },
@@ -234,6 +309,8 @@ export function useBarcodeScanner():
   return {
     viewportRef,
     status,
+    runtimeStatus,
+    providerMetadata,
     observation,
     start,
     pause: () =>
