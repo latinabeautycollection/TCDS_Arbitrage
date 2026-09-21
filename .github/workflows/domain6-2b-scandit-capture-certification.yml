@@ -47,6 +47,10 @@ jobs:
       # package and runtime parity, production build and the inherited 6.2A
       # runtime/cache checks all run inside scandit:capture:certify.
       - run: npm ci
+      # The Scandit runtime files are generated from the approved package and are
+      # not committed, so a clean checkout has to produce them before the runtime
+      # and parity checks can run.
+      - run: npm run scandit:prepare
       - run: npm run scandit:capture:certify
       - run: npm run check --if-present
       - run: npm run verify --if-present
