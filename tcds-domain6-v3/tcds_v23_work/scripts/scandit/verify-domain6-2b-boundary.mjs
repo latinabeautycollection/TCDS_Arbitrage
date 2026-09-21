@@ -247,11 +247,51 @@ if (!changed.length) {
   );
 }
 
+// Git reports changed paths from the repository root, while the 6.2B ownership
+// rules are written against the application root. The application prefix is
+// removed before the protected-feature comparison, so the check also works when
+// the application is nested inside the repository.
+let applicationPrefix = "";
+
+try {
+  const repositoryRoot =
+    git([
+      "rev-parse",
+      "--show-toplevel",
+    ]).replaceAll("\\", "/");
+
+  const nested =
+    path.relative(
+      repositoryRoot,
+      root,
+    ).replaceAll("\\", "/");
+
+  applicationPrefix =
+    nested && nested !== "."
+      ? `${nested}/`
+      : "";
+} catch {
+  applicationPrefix = "";
+}
+
+export function toApplicationPath(
+  rel,
+  prefix = applicationPrefix,
+) {
+  return prefix &&
+    rel.startsWith(prefix)
+    ? rel.slice(prefix.length)
+    : rel;
+}
+
 for (const rel of changed) {
+  const applicationRel =
+    toApplicationPath(rel);
+
   if (
     forbiddenFeatureDirs.some(
       (dir) =>
-        rel.startsWith(dir),
+        applicationRel.startsWith(dir),
     )
   ) {
     violations.push(
