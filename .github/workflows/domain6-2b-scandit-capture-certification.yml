@@ -1,0 +1,52 @@
+# Paths and the working directory are adapted to this repository: the
+# application lives in tcds-domain6-v3/tcds_v23_work.
+name: Domain 6.2B Scandit Capture Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: "Full 40-character production baseline SHA"
+        required: true
+        type: string
+  # No path filter: this workflow is intended to be a required check, and a
+  # path-filtered workflow never reports a result on pull requests that do not
+  # touch those paths.
+  pull_request:
+
+jobs:
+  capture-certify:
+    name: 6.2B capture certification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tcds-domain6-v3/tcds_v23_work
+    env:
+      DOMAIN6_2B_BASELINE_SHA: ${{ github.event.pull_request.base.sha || inputs.baseline_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tcds-domain6-v3/tcds_v23_work/package-lock.json
+
+      - name: Validate baseline SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DOMAIN6_2B_BASELINE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          git cat-file -e "${DOMAIN6_2B_BASELINE_SHA}^{commit}"
+
+      # Clean install, strict TypeScript, 6.2A regression certification, 6.2B
+      # unit tests, provider/boundary checks, protected-feature check, Scandit
+      # package and runtime parity, production build and the inherited 6.2A
+      # runtime/cache checks all run inside scandit:capture:certify.
+      - run: npm ci
+      - run: npm run scandit:capture:certify
+      - run: npm run check --if-present
+      - run: npm run verify --if-present
