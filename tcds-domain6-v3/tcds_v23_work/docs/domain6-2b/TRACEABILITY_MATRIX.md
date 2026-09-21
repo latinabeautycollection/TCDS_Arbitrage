@@ -20,7 +20,7 @@
 | Fix the repository path handling of the protected-feature check | CR-6.2B-11 | `protectedFeatureBoundary`, plus the before-and-after probe |
 | One positive and one negative protected-feature test | CR-6.2B-11 | `protectedFeatureBoundary` |
 | Install and enable the capture certification workflow | CR-6.2B-12 | workflow file; same chain as the local run |
-| Tests for the issues found | CR-6.2B-13 | 15 tests; 11 fail against the code as delivered |
+| Tests for the issues found | CR-6.2B-13 | 16 tests; 12 fail against the code as delivered |
 
 ## B. Requested tests
 
@@ -37,19 +37,20 @@
 | diagnostic status shows safe failure information | `diagnosticStatusSurface` |
 | repeated Start leaves no stale camera session | `captureLifecycle` |
 | repeated failure and retry leak no listeners or resources | `captureLifecycle` |
+| stale decode or session rejection | `captureLifecycle` |
 
 ## C. Requested evidence
 
 | Evidence | Result |
 |---|---|
 | runtime slice still 54/54 | PASS |
-| updated capture suite fully passing | PASS — 46/46 |
+| updated capture suite fully passing | PASS — 47/47 |
 | strict TypeScript | PASS, with library checking enabled |
 | production build | PASS, offline cache regenerated |
 | runtime, cache and version parity | PASS — 8.5.3, 44 runtime files, built output and cache match the manifest |
 | provider and boundary checks | PASS |
 | protected-feature check | PASS |
-| continuous integration | pending the first pull-request run |
+| continuous integration | PASS — both workflows green on the pull request |
 | zero unauthorized warehouse business mutations | no database client, query or migration in the slice; no SQL in the diff |
 | zero unauthorized warehouse feature changes | no changed file under a business feature; every changed file belongs to the scanner subsystem, its tests, the certification scripts, the workflow or these documents |
 

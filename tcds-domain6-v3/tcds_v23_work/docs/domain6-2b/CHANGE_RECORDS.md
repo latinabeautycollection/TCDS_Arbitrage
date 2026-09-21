@@ -64,7 +64,8 @@ it to the context immediately. The package used the returned mode as delivered.
 only feedback authority. A decode from a previous session, or from any phase other than CAPTURING, is
 ignored and its mode is disabled.
 **Test added.** `captureLifecycle`: "does not decode a barcode that is already visible while the camera
-starts" and "clears the SDK feedback and emits nothing when the policy disables feedback".
+starts", "clears the SDK feedback and emits nothing when the policy disables feedback" and "rejects a decode
+that arrives from a previous session".
 **Certification result.** PASS. Both tests fail against the code as delivered.
 
 ---
@@ -200,6 +201,6 @@ against regression.
 **Fix.** A fake Scandit SDK built from the real 8.5.3 type definitions and observed behaviour: the capture
 mode is created enabled and carries the SDK's own success feedback, the camera is driven through its state
 API, and decoded barcodes reach the registered listener. The real controller and hook run against it.
-**Test added.** 15 tests across `captureLifecycle`, `scannerHookLifecycle`, `runtimeErrorMapping` and
+**Test added.** 16 tests across `captureLifecycle`, `scannerHookLifecycle`, `runtimeErrorMapping` and
 `diagnosticStatusSurface`.
-**Certification result.** 6.2B suite 46/46. Against the code as delivered, 11 of the 15 fail.
+**Certification result.** 6.2B suite 47/47. Against the code as delivered, 12 of the 16 fail.

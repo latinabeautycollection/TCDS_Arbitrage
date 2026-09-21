@@ -79,7 +79,7 @@ The delivered suite tests contracts and models. We added a fake Scandit SDK, wri
 type definitions and observed behaviour, and the real controller and hook run against it. That is what makes
 the lifecycle rules above verifiable rather than described.
 
-Current totals: runtime suite 54, capture suite 46.
+Current totals: runtime suite 54, capture suite 47.
 
 ## 7. Before the real-device matrix
 

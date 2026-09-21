@@ -524,4 +524,62 @@ describe("6.2B capture lifecycle", () => {
         .phase,
     ).toBe("CAPTURING");
   });
+
+  it("rejects a decode that arrives from a previous session", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    const stale = sdk.capture;
+
+    // The SDK had already dispatched this callback when the session was replaced.
+    const staleListener = [
+      ...stale.listeners,
+    ][0];
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    expect(sdk.capture).not.toBe(stale);
+    expect(staleListener).toBeDefined();
+
+    const disableCallsBefore =
+      stale.enabledHistory.length;
+
+    staleListener?.didScan?.(stale, {
+      newlyRecognizedBarcode: {
+        data: "STALE-SESSION",
+        rawData: "STALE-SESSION",
+        symbology: "qr",
+      },
+      frameSequenceID: 99,
+    });
+
+    await flush();
+
+    // It is ignored, and the stale mode is disabled instead of driving state.
+    expect(
+      harness.observations,
+    ).toHaveLength(0);
+    expect(harness.phases).not.toContain(
+      "DECODED",
+    );
+    expect(
+      stale.enabledHistory.length,
+    ).toBe(disableCallsBefore + 1);
+    expect(
+      stale.enabledHistory[
+        stale.enabledHistory.length - 1
+      ],
+    ).toBe(false);
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("CAPTURING");
+  });
 });

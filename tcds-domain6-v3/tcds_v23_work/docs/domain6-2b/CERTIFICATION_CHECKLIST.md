@@ -52,6 +52,7 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 | ✅ | Decode disables capture before the observation is emitted | PASS | `captureLifecycle`: after a decode the phase is PAUSED and capture is disabled |
 | ✅ | Capture stays paused until an explicit resume | PASS | same test |
 | ✅ | A barcode already visible during startup cannot decode early | PASS | `captureLifecycle`: the mode is created disabled and out-of-phase decodes are ignored |
+| ✅ | A decode from a replaced session is rejected | PASS | `captureLifecycle`: an in-flight callback from the previous mode is ignored and that mode is disabled |
 | ✅ | Feedback follows the capture policy only | PASS | `captureLifecycle`: the SDK success feedback is cleared and nothing is emitted when the policy disables it |
 
 ## Device controls and state
@@ -83,5 +84,5 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 
 - **29 of 33 items** are verified today; 4 wait for the real-device matrix, and 4 of the verified items rest
   on code review because no automated check can reproduce real camera hardware.
-- Automated totals: 6.2A **54/54**, 6.2B **46/46**, strict TypeScript PASS, build PASS, runtime, cache and
+- Automated totals: 6.2A **54/54**, 6.2B **47/47**, strict TypeScript PASS, build PASS, runtime, cache and
   version parity PASS, boundary PASS, protected-feature check PASS.
