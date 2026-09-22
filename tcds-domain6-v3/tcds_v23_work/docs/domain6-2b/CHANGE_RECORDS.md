@@ -204,3 +204,51 @@ API, and decoded barcodes reach the registered listener. The real controller and
 **Test added.** 16 tests across `captureLifecycle`, `scannerHookLifecycle`, `runtimeErrorMapping` and
 `diagnosticStatusSurface`.
 **Certification result.** 6.2B suite 47/47. Against the code as delivered, 12 of the 16 fail.
+
+---
+
+## CR-6.2B-14 — A capture timeout must release the camera
+
+**Finding.** When a capture attempt timed out, the scanner stopped accepting scans but the camera stream,
+listener, view and capture mode stayed live until the next Start. On a device that keeps the camera
+indicator on, drains battery and leaves the SDK half-live.
+**Root cause.** The timeout handler disabled capture and reported the failure, but never ran the teardown
+that unmount and cancel already use.
+**Affected files.** `src/lib/scanning/providers/scandit/ScanditBarcodeCaptureController.ts`.
+**Fix.** The timeout path runs the same release as every other end of a session. A cleanup failure is
+reported with the timeout instead of replacing it.
+**Test added.** `captureLifecycle`: "releases the camera when capture times out, and the next Start is
+clean" now asserts the camera is stopped, the listener removed, the mode removed and the view detached at
+the timeout itself.
+**Certification result.** PASS.
+
+---
+
+## CR-6.2B-15 — A way into the diagnostic surface on an installed PWA
+
+**Finding.** The diagnostic surface has no navigation entry by design, and an installed PWA has no address
+bar, so certification testing could not open it on the device it must be tested on.
+**Root cause.** The route was reachable only by typing the URL.
+**Affected files.** `src/components/scanning/ScannerDiagnosticsEntry.tsx` (new),
+`src/components/StatusStrip.tsx`.
+**Fix.** A press and hold on the scanner chip in the status strip opens the surface. It is unlabelled, it
+exists only for a signed-in session, and the route keeps the same guard as every other screen. Ordinary
+taps and a hold that leaves the chip do nothing.
+**Test added.** `diagnosticsEntry`: press and hold opens it, an ordinary tap does not, a hold that leaves
+the target does not, and nothing at all is offered when nobody is signed in.
+**Certification result.** PASS.
+
+---
+
+## CR-6.2B-16 — Load the diagnostic route on demand
+
+**Finding.** The Scandit runtime was part of the initial application bundle, so every user downloaded the
+scanner SDK on first load even if they never scanned.
+**Root cause.** The diagnostic page is the only consumer of the runtime and the router imported it eagerly.
+**Affected files.** `src/routes/AppRouter.tsx`.
+**Fix.** The route is loaded on demand behind a suspense fallback that matches the existing route
+placeholder.
+**Test added.** None; the build output is the evidence.
+**Certification result.** PASS. The main chunk drops from 865 kB to 539 kB (241 kB to 146 kB gzipped) and
+the scanner loads its own 327 kB chunk (95 kB gzipped) when the surface is opened. The offline cache still
+carries the certified runtime, 45 entries.
