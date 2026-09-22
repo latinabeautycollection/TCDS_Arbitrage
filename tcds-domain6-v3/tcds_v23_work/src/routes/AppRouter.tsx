@@ -1,3 +1,4 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, createBrowserRouter } from 'react-router-dom';
 import { AppLayout } from '../layouts/AppLayout';
 import { Login } from '../screens/Login';
@@ -13,9 +14,20 @@ import { PhotosScreen } from '../features/photos/PhotosScreen';
 import { VerificationScreen } from '../features/verification/VerificationScreen';
 import { StorageAssignmentScreen } from '../features/storage/StorageAssignmentScreen';
 import { ProtectedRoute } from '../features/auth/routes/ProtectedRoute';
-import { ScannerCaptureDiagnosticPage } from '../pages/diagnostics/ScannerCaptureDiagnosticPage';
+
+// The diagnostic surface is the only consumer of the Scandit runtime. Loading it
+// on demand keeps the scanner SDK out of the initial application bundle.
+const ScannerCaptureDiagnosticPage = lazy(async () => ({
+  default: (await import('../pages/diagnostics/ScannerCaptureDiagnosticPage')).ScannerCaptureDiagnosticPage
+}));
 
 const protect = (element: JSX.Element) => <ProtectedRoute>{element}</ProtectedRoute>;
+
+const lazyScreen = (element: JSX.Element) => (
+  <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center" role="status" aria-live="polite"><div className="skeleton h-14 w-56 rounded-2xl" /></div>}>
+    {element}
+  </Suspense>
+);
 
 export const router = createBrowserRouter([
   { path: '/', element: <AppLayout />, children: [
@@ -32,7 +44,7 @@ export const router = createBrowserRouter([
     { path: 'returns', element: protect(<ReturnsScreen />) },
     { path: 'settings', element: protect(<SupervisorConsoleScreen />) },
     // 6.2B scanner diagnostic: behind the existing sign-in guard and not linked from any navigation.
-    { path: '__diagnostics/scanner-capture', element: protect(<ScannerCaptureDiagnosticPage />) },
+    { path: '__diagnostics/scanner-capture', element: protect(lazyScreen(<ScannerCaptureDiagnosticPage />)) },
     { path: '*', element: <Navigate to="/dashboard" replace /> }
   ]}
 ]);

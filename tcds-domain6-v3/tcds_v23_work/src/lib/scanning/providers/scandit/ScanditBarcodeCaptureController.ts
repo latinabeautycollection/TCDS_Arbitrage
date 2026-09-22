@@ -971,18 +971,25 @@ export class ScanditBarcodeCaptureController {
             return;
           }
 
+          // A timed-out attempt is finished. The camera, listener, view and
+          // capture mode are released now instead of staying live until the
+          // next Start, so no stream, indicator or half-live mode survives it.
+          let cleanupFailure:
+            | BarcodeCaptureError
+            | undefined;
+
           try {
-            await this.capture
-              ?.setEnabled(false);
+            await this.cleanupResources();
           } catch (error) {
-            const mapped =
-              mapScanditCaptureError(
-                error,
-              );
-            this.handleCaptureFailure(
-              mapped,
-            );
-            return;
+            cleanupFailure =
+              error instanceof BarcodeCaptureError
+                ? error
+                : new BarcodeCaptureError(
+                    "CAPTURE_CLEANUP_FAILED",
+                    "Capture timed out and resources were not released cleanly.",
+                    true,
+                    error,
+                  );
           }
 
           this.handleCaptureFailure(
@@ -990,6 +997,8 @@ export class ScanditBarcodeCaptureController {
               "CAPTURE_TIMEOUT",
               "No barcode was decoded before the configured capture timeout.",
               true,
+              cleanupFailure,
+              cleanupFailure?.cleanupFailures,
             ),
           );
         });
