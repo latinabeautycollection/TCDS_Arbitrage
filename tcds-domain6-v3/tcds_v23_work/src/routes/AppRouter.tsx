@@ -13,6 +13,7 @@ import { PhotosScreen } from '../features/photos/PhotosScreen';
 import { VerificationScreen } from '../features/verification/VerificationScreen';
 import { StorageAssignmentScreen } from '../features/storage/StorageAssignmentScreen';
 import { ProtectedRoute } from '../features/auth/routes/ProtectedRoute';
+import { ScannerCaptureDiagnosticPage } from '../pages/diagnostics/ScannerCaptureDiagnosticPage';
 
 const protect = (element: JSX.Element) => <ProtectedRoute>{element}</ProtectedRoute>;
 
@@ -30,6 +31,8 @@ export const router = createBrowserRouter([
     { path: 'pack-ship', element: protect(<PackShipScreen />) },
     { path: 'returns', element: protect(<ReturnsScreen />) },
     { path: 'settings', element: protect(<SupervisorConsoleScreen />) },
+    // 6.2B scanner diagnostic: behind the existing sign-in guard and not linked from any navigation.
+    { path: '__diagnostics/scanner-capture', element: protect(<ScannerCaptureDiagnosticPage />) },
     { path: '*', element: <Navigate to="/dashboard" replace /> }
   ]}
 ]);

@@ -1,1 +1,1 @@
-export { ScanditScannerProvider } from './ScanditScannerProvider';
+export { ScanditScannerProvider } from "./ScanditScannerProvider";

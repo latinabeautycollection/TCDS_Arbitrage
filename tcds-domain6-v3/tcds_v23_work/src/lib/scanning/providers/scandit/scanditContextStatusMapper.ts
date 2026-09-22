@@ -43,6 +43,12 @@ export function assessScanditContextStatus(status: ContextStatus): ScanditContex
   const code = status.code;
   const sanitizedMessage = safeMessage(status);
 
+  // A recognised failure code is authoritative even when the SDK reports the
+  // context as valid, so a camera or runtime error is never published as READY.
+  // Only an unrecognised code falls back to the reported validity.
+  const failure = classifyScanditFailureCode(code, sanitizedMessage);
+  if (failure) return failure;
+
   if (status.isValid || code === 1) {
     return {
       code,
@@ -67,6 +73,23 @@ export function assessScanditContextStatus(status: ContextStatus): ScanditContex
     };
   }
 
+  return {
+    code,
+    isValid: false,
+    category: 'UNKNOWN_ERROR',
+    phase: 'FAILED',
+    blockingReason: 'SDK_CONTEXT_INVALID',
+    errorCode: 'SDK_RUNTIME_FAILURE',
+    retryable: false,
+    sanitizedMessage,
+  };
+}
+
+/** Returns null when the code is not a recognised Scandit failure code. */
+function classifyScanditFailureCode(
+  code: number,
+  sanitizedMessage: string,
+): ScanditContextStatusAssessment | null {
   if (code === 6) {
     return {
       code,
@@ -224,14 +247,5 @@ export function assessScanditContextStatus(status: ContextStatus): ScanditContex
     };
   }
 
-  return {
-    code,
-    isValid: false,
-    category: 'UNKNOWN_ERROR',
-    phase: 'FAILED',
-    blockingReason: 'SDK_CONTEXT_INVALID',
-    errorCode: 'SDK_RUNTIME_FAILURE',
-    retryable: false,
-    sanitizedMessage,
-  };
+  return null;
 }

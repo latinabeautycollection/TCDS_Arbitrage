@@ -1,0 +1,35 @@
+# Domain 6.2B Green Tier 1 Certification
+
+- [ ] Hardened 6.2A remains certified.
+- [ ] Scandit imports remain provider-isolated.
+- [ ] Camera permission is intentional only.
+- [ ] World-facing camera preference works.
+- [ ] Best-camera fallback is available for camera-not-found.
+- [ ] Recommended BarcodeCapture camera settings are applied.
+- [ ] DataCaptureView renders.
+- [ ] Picture-in-picture is disabled.
+- [ ] BarcodeCapture is the only capture mode.
+- [ ] Code128 decodes.
+- [ ] EAN13/UPCA decodes.
+- [ ] QR decodes.
+- [ ] didScan copies primitives only.
+- [ ] Scandit session object does not escape callback.
+- [ ] Decode disables capture before observation is emitted.
+- [ ] Capture remains paused until explicit resume.
+- [ ] Stop disables capture before camera shutdown.
+- [ ] Camera is released on route unmount.
+- [ ] Camera is released while PWA is hidden.
+- [ ] Session resumes only when the scanner surface still owns it.
+- [ ] Start/stop/resume operations are serialized.
+- [ ] Impossible state transitions fail closed.
+- [ ] Torch control renders only when supported.
+- [ ] Zoom availability is capability-driven.
+- [ ] No Domain 6 business API calls.
+- [ ] No SQL files/migrations.
+- [ ] No PostgreSQL mutation.
+- [ ] No WarehouseScanObservation business integration yet.
+- [ ] No advanced Scandit modes.
+- [ ] iPhone Safari real-device matrix passes.
+- [ ] Installed iPhone PWA matrix passes.
+- [ ] Chrome iOS baseline passes.
+- [ ] Existing Domain 6 checks/regressions remain green.
