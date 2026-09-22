@@ -38,7 +38,10 @@ difference between that baseline and the current head.
 
 ## 4. Diagnostic surface
 
-Route: `/__diagnostics/scanner-capture`, behind the existing sign-in, no navigation entry, no new role.
+Route: `/__diagnostics/scanner-capture`, behind the existing sign-in, no navigation entry, no new role. It
+is loaded on demand, so the scanner SDK stays out of the initial bundle. On a device, and in an installed
+PWA where there is no address bar, press and hold the scanner chip in the status strip to open it; the
+gesture exists only for a signed-in session.
 
 It shows the scanner viewport, the capture controls, the decode result labelled as an observation, and a
 read-only status section for the device test:
@@ -79,14 +82,14 @@ The delivered suite tests contracts and models. We added a fake Scandit SDK, wri
 type definitions and observed behaviour, and the real controller and hook run against it. That is what makes
 the lifecycle rules above verifiable rather than described.
 
-Current totals: runtime suite 54, capture suite 47.
+Current totals: runtime suite 54, capture suite 51.
 
 ## 7. Before the real-device matrix
 
 1. Deploy a build that contains this slice to the test environment over HTTPS.
 2. Confirm the preview unlock flag is off in that deployment.
-3. Decide how the installed PWA reaches the diagnostic route; there is no address bar in an installed PWA
-   and the route has no navigation entry by design (finding B-11).
+3. Reach the surface on the device by pressing and holding the scanner chip in the status strip while
+   signed in. Typing the URL still works in a browser.
 4. The device matrix needs the device model, the operating system and browser version, the mode, the tester,
    the timestamp, the result and the evidence for every row.
 

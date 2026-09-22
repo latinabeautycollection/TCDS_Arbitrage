@@ -205,7 +205,7 @@ describe("6.2B capture lifecycle", () => {
     ).toBe("PAUSED");
   });
 
-  it("releases the timed-out attempt before the next Start", async () => {
+  it("releases the camera when capture times out, and the next Start is clean", async () => {
     const harness = createHarness();
 
     await harness.controller.start({
@@ -229,6 +229,25 @@ describe("6.2B capture lifecycle", () => {
       harness.controller.getStatus()
         .phase,
     ).toBe("CAPTURE_ERROR");
+
+    // The timed-out attempt is released immediately: no camera stream, listener,
+    // view or capture mode survives until the next Start.
+    expect(firstCamera.state).toBe(
+      "off",
+    );
+    expect(
+      firstCapture.removedListeners,
+    ).toBe(1);
+    expect(
+      harness.context.removedModes,
+    ).toContain(firstCapture);
+    expect(firstView?.detachCount).toBe(
+      1,
+    );
+    expect(
+      harness.controller.getStatus()
+        .cameraOn,
+    ).toBe(false);
 
     await harness.controller.start({
       viewportElement:
