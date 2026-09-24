@@ -5,13 +5,18 @@ import { useAuth } from '../context/AuthContext';
 // PREVIEW TOGGLE (temporary): when VITE_PREVIEW_UNLOCK=true, the auth gate is bypassed so the
 // warehouse manager can view every screen before the backend auth API exists. Set it to false
 // (or unset) to restore real authentication. Remove this block once the backend is live.
-const PREVIEW_UNLOCK = import.meta.env.VITE_PREVIEW_UNLOCK === 'true';
+//
+// Exported so that anything which must follow the same temporary rule reads it from here and
+// nowhere else. When this block goes, every such surface closes with it.
+export function isPreviewAccessEnabled(): boolean {
+  return import.meta.env.VITE_PREVIEW_UNLOCK === 'true';
+}
 
 export function ProtectedRoute({ children }: PropsWithChildren) {
   const { state, session } = useAuth();
   const location = useLocation();
 
-  if (PREVIEW_UNLOCK) {
+  if (isPreviewAccessEnabled()) {
     return <>{children}</>;
   }
 

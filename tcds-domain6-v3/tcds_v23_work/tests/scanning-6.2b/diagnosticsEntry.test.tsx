@@ -53,6 +53,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllEnvs();
 });
 
 function renderEntry() {
@@ -120,8 +121,31 @@ describe("6.2B diagnostic entry point", () => {
     ).not.toHaveBeenCalled();
   });
 
-  it("offers nothing at all when nobody is signed in", () => {
+  it("follows the temporary preview access rule when nobody is signed in", () => {
     authMock.authenticated = false;
+    vi.stubEnv("VITE_PREVIEW_UNLOCK", "true");
+
+    renderEntry();
+
+    const target = screen.getByTestId(
+      "scanner-diagnostics-entry",
+    );
+
+    fireEvent.pointerDown(target);
+    vi.advanceTimersByTime(
+      SCANNER_DIAGNOSTICS_HOLD_MS,
+    );
+
+    expect(
+      routerMock.navigate,
+    ).toHaveBeenCalledWith(
+      SCANNER_DIAGNOSTICS_ROUTE,
+    );
+  });
+
+  it("offers nothing at all when nobody is signed in and preview access is off", () => {
+    authMock.authenticated = false;
+    vi.stubEnv("VITE_PREVIEW_UNLOCK", "false");
 
     const { container } = renderEntry();
 
