@@ -40,8 +40,9 @@ difference between that baseline and the current head.
 
 Route: `/__diagnostics/scanner-capture`, behind the existing sign-in, no navigation entry, no new role. It
 is loaded on demand, so the scanner SDK stays out of the initial bundle. On a device, and in an installed
-PWA where there is no address bar, press and hold the scanner chip in the status strip to open it; the
-gesture exists only for a signed-in session.
+PWA where there is no address bar, press and hold the scanner chip in the status strip to open it. The
+gesture follows the same access rule as the route guard, read from the guard itself, so it adds no access
+path of its own and closes when that rule is withdrawn.
 
 It shows the scanner viewport, the capture controls, the decode result labelled as an observation, and a
 read-only status section for the device test:
@@ -82,7 +83,7 @@ The delivered suite tests contracts and models. We added a fake Scandit SDK, wri
 type definitions and observed behaviour, and the real controller and hook run against it. That is what makes
 the lifecycle rules above verifiable rather than described.
 
-Current totals: runtime suite 54, capture suite 51.
+Current totals: runtime suite 54, capture suite 52.
 
 ## 7. Before the real-device matrix
 
