@@ -252,3 +252,22 @@ placeholder.
 **Certification result.** PASS. The main chunk drops from 865 kB to 539 kB (241 kB to 146 kB gzipped) and
 the scanner loads its own 327 kB chunk (95 kB gzipped) when the surface is opened. The offline cache still
 carries the certified runtime, 45 entries.
+
+---
+
+## CR-6.2B-17 — The diagnostic entry point follows the route guard's access rule
+
+**Finding.** On the deployed build the press-and-hold entry did nothing, so the diagnostic surface still
+could not be reached from an installed PWA.
+**Root cause.** The entry required a signed-in session. The authentication shell is not wired yet, so no
+session is ever signed in. The route guard meanwhile allows the application's temporary preview access, so
+the entry was stricter than the route it opens.
+**Affected files.** `src/components/scanning/ScannerDiagnosticsEntry.tsx`,
+`src/features/auth/routes/ProtectedRoute.tsx`.
+**Fix.** The guard exports its temporary access rule instead of keeping it private, and the entry reads that
+rule from the guard. One definition, no second access path: when the temporary rule is withdrawn the gesture
+closes with it, and the route keeps its guard either way. No authentication, session or authorization
+behaviour is added, changed or owned by the scanner slice.
+**Test added.** `diagnosticsEntry`: opens for a signed-in session, opens under temporary preview access with
+no session, and offers nothing at all when neither applies.
+**Certification result.** PASS. Capture suite 52/52.

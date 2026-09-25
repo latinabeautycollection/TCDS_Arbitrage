@@ -70,7 +70,7 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 
 | | Item | Status | Evidence |
 |---|---|---|---|
-| ✅ | The surface can be opened on an installed PWA | PASS | `diagnosticsEntry`: a signed-in press and hold on the scanner chip in the status strip |
+| ✅ | The surface can be opened on an installed PWA | PASS | `diagnosticsEntry`: press and hold the scanner chip in the status strip, under the same access rule as the route guard |
 | 🔴 | iPhone Safari matrix passes | DEVICE | open — needs the deployed build |
 | 🔴 | Installed iPhone PWA matrix passes | DEVICE | open |
 | 🔴 | Chrome iOS baseline passes | DEVICE | open |
@@ -85,5 +85,5 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 
 - **29 of 33 items** are verified today; 4 wait for the real-device matrix, and 4 of the verified items rest
   on code review because no automated check can reproduce real camera hardware.
-- Automated totals: 6.2A **54/54**, 6.2B **51/51**, strict TypeScript PASS, build PASS, runtime, cache and
+- Automated totals: 6.2A **54/54**, 6.2B **52/52**, strict TypeScript PASS, build PASS, runtime, cache and
   version parity PASS, boundary PASS, protected-feature check PASS.

@@ -44,7 +44,7 @@
 | Evidence | Result |
 |---|---|
 | runtime slice still 54/54 | PASS |
-| updated capture suite fully passing | PASS — 51/51 |
+| updated capture suite fully passing | PASS — 52/52 |
 | strict TypeScript | PASS, with library checking enabled |
 | production build | PASS, offline cache regenerated |
 | runtime, cache and version parity | PASS — 8.5.3, 44 runtime files, built output and cache match the manifest |
@@ -67,7 +67,7 @@
 | Requested | Change record | Evidence |
 |---|---|---|
 | A capture timeout must fully release the camera and capture context | CR-6.2B-14 | `captureLifecycle` |
-| A hidden, auth-gated entry point for the installed PWA | CR-6.2B-15 | `diagnosticsEntry`, four cases |
+| A hidden, auth-gated entry point for the installed PWA | CR-6.2B-15, CR-6.2B-17 | `diagnosticsEntry`, five cases |
 | Lazy-load the diagnostic route so the SDK leaves the main chunk | CR-6.2B-16 | build output: 865 kB to 539 kB, 241 kB to 146 kB gzipped |
 
 ## E. Open items
