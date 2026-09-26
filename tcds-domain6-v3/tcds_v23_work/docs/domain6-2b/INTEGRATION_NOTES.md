@@ -85,7 +85,12 @@ the lifecycle rules above verifiable rather than described.
 
 Current totals: runtime suite 54, capture suite 52.
 
-## 7. Before the real-device matrix
+## 7. The real-device matrix
+
+Completed on 2026-09-26: iPhone 17, iOS 27.0, Safari, installed Home Screen web app and Chrome for iOS.
+**39 checks, 0 failures.** Record and observations: `DEVICE_TEST_EVIDENCE.md`.
+
+## 8. How the matrix was run
 
 1. Deploy a build that contains this slice to the test environment over HTTPS.
 2. Confirm the preview unlock flag is off in that deployment.
@@ -94,7 +99,7 @@ Current totals: runtime suite 54, capture suite 52.
 4. The device matrix needs the device model, the operating system and browser version, the mode, the tester,
    the timestamp, the result and the evidence for every row.
 
-## 8. Not in this slice
+## 9. Not in this slice
 
 Business APIs and workflows, database access, telemetry persistence, offline replay, advanced capture modes,
 and scanner profiles loaded from warehouse configuration. The capture policy used here is the immutable

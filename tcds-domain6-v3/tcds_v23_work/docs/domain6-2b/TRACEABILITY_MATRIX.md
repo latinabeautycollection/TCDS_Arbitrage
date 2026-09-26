@@ -70,8 +70,14 @@
 | A hidden, auth-gated entry point for the installed PWA | CR-6.2B-15, CR-6.2B-17 | `diagnosticsEntry`, five cases |
 | Lazy-load the diagnostic route so the SDK leaves the main chunk | CR-6.2B-16 | build output: 865 kB to 539 kB, 241 kB to 146 kB gzipped |
 
-## E. Open items
+## E. Device evidence
 
-1. The real-device matrix: iPhone Safari, installed iPhone PWA, Chrome iOS. Needs the deployed build, and a
-   licensed runtime in the deployed environment for the decode rows.
-2. Mid-session camera loss and the detailed capture-policy definitions, both deferred to 6.2C.
+The real-device matrix is complete: iPhone 17 on iOS 27.0, in Safari, the installed Home Screen web app and
+Chrome for iOS. **39 checks, 0 failures.** Full record and the seven observations: `DEVICE_TEST_EVIDENCE.md`.
+
+## F. Open items
+
+1. A decision on the device observations, in particular D-1 (platform permission behaviour in the installed
+   web app) and D-3 (safe areas in the application shell).
+2. Returning the shared deployment to its secure posture once the evidence is accepted.
+3. Mid-session camera loss and the detailed capture-policy definitions, both deferred to 6.2C.

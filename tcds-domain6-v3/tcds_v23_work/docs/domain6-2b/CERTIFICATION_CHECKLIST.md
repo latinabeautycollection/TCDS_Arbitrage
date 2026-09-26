@@ -1,4 +1,4 @@
-# Domain 6.2B Green Tier 1 Certification Checklist — Filled In (29 of 33)
+# Domain 6.2B Green Tier 1 Certification Checklist — Filled In (39 of 42)
 
 Legend: **PASS** verified by an automated check that runs in certification ·
 **REVIEW** verified by code review only · **DEVICE** waiting for the real-device matrix.
@@ -27,10 +27,10 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 | | Item | Status | Evidence |
 |---|---|---|---|
 | ✅ | Camera permission is intentional only | PASS | the camera is requested inside `start()` only; `scannerHookLifecycle` proves a start that was abandoned never reaches the provider |
-| ⚠️ | World-facing camera preference works | REVIEW + DEVICE | preference is applied and re-verified after access; the device matrix confirms it |
+| ✅ | World-facing camera preference works | PASS | the rear camera was used throughout the device run |
 | ⚠️ | Best-camera fallback for camera-not-found | REVIEW + DEVICE | fallback path is implemented for `CAMERA_UNAVAILABLE`; no simulator reproduces the real case |
 | ⚠️ | Recommended BarcodeCapture camera settings are applied | REVIEW | settings are applied before the camera starts |
-| 🔴 | DataCaptureView renders | DEVICE | requires the deployed surface on a device |
+| ✅ | DataCaptureView renders | PASS | device run, all three browsers |
 | ⚠️ | Picture-in-picture is disabled | REVIEW | disabled on the view before attachment |
 | ✅ | Camera is released on route unmount | PASS | `scannerHookLifecycle` covers unmount during startup and before startup |
 | ✅ | Camera is released while the PWA is hidden | PASS | `pwaLifecycleContract`; `captureLifecycle` proves a failed scanner is not suspended or silently resumed |
@@ -44,9 +44,9 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 
 | | Item | Status | Evidence |
 |---|---|---|---|
-| 🔴 | Code 128 decodes | DEVICE | symbology is enabled by the certification policy; a real barcode is needed |
-| 🔴 | EAN-13 / UPC-A decodes | DEVICE | as above |
-| 🔴 | QR decodes | DEVICE | as above |
+| ✅ | Code 128 decodes | PASS | device run: TCDS-6.2B-C128 |
+| ✅ | EAN-13 / UPC-A decodes | PASS | device run: 5901234123457, and UPC-A as 0036000291452 |
+| ✅ | QR decodes | PASS | device run: TCDS-6.2B-QR-TEST |
 | ✅ | `didScan` copies primitives only | PASS | `deviceIdentityBoundary`; the listener copies inside the callback |
 | ✅ | The SDK session object never escapes the callback | PASS | same test and the provider-neutral observation contract |
 | ✅ | Decode disables capture before the observation is emitted | PASS | `captureLifecycle`: after a decode the phase is PAUSED and capture is disabled |
@@ -71,9 +71,9 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 | | Item | Status | Evidence |
 |---|---|---|---|
 | ✅ | The surface can be opened on an installed PWA | PASS | `diagnosticsEntry`: press and hold the scanner chip in the status strip, under the same access rule as the route guard |
-| 🔴 | iPhone Safari matrix passes | DEVICE | open — needs the deployed build |
-| 🔴 | Installed iPhone PWA matrix passes | DEVICE | open |
-| 🔴 | Chrome iOS baseline passes | DEVICE | open |
+| ✅ | iPhone Safari matrix passes | PASS | 21/21 |
+| ✅ | Installed iPhone PWA matrix passes | PASS | 10/10; sign-in not applicable; see observation D-1 |
+| ✅ | Chrome iOS baseline passes | PASS | 5/5 |
 
 ## Regression
 
@@ -83,7 +83,10 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 
 ## Summary
 
-- **29 of 33 items** are verified today; 4 wait for the real-device matrix, and 4 of the verified items rest
-  on code review because no automated check can reproduce real camera hardware.
-- Automated totals: 6.2A **54/54**, 6.2B **52/52**, strict TypeScript PASS, build PASS, runtime, cache and
-  version parity PASS, boundary PASS, protected-feature check PASS.
+- **39 of 42 items verified.** The remaining 3 rest on code review, because no automated check and no
+  device test can reproduce them: the best-camera fallback for a camera that cannot be opened, the
+  recommended camera settings, and picture-in-picture being disabled.
+- The real-device matrix is complete: **39 checks, 0 failures**, on iPhone 17 / iOS 27.0 in Safari, the
+  installed Home Screen web app and Chrome for iOS. See `DEVICE_TEST_EVIDENCE.md`.
+- Automated totals: runtime suite **54/54**, capture suite **52/52**, strict TypeScript PASS, build PASS,
+  runtime, cache and version parity PASS, boundary PASS, protected-feature check PASS, CI PASS.

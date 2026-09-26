@@ -20,6 +20,7 @@ and are not fixed, so the slice stays inside its approved scope.
 | B-12 | Low | The SDK is in the main bundle because the diagnostic route is imported eagerly | Closed — CR-6.2B-16 |
 | B-13 | Low | Mid-session camera loss is not detected | Deferred to 6.2C |
 | B-14 | Low | Capture-policy details that matter to the next slice | Deferred to 6.2C |
+| D-1 … D-7 | — | Observations from the real-device run | See `DEVICE_TEST_EVIDENCE.md` |
 
 ---
 
