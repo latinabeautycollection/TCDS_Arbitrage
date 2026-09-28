@@ -34,6 +34,9 @@ import {
   assertCaptureTransition,
 } from "../../capture/captureStateMachine";
 import {
+  isStandaloneDisplay,
+} from "../../capture/displayMode";
+import {
   sanitizeProviderErrorCause,
 } from "../../contracts/ScannerProviderError";
 
@@ -206,6 +209,24 @@ export class ScanditBarcodeCaptureController {
       ) {
         // Returning to the foreground is not a recovery. A failed or blocked
         // scanner becomes READY again only through a successful restart.
+        return;
+      }
+
+      if (isStandaloneDisplay()) {
+        // An installed web app does not keep its camera grant across a
+        // background, so restarting the camera here would raise a permission
+        // prompt on its own while the operator is looking at something else.
+        // The session comes back paused instead: the operator's own resume
+        // carries the gesture the platform expects.
+        this.wasActiveBeforeBackground =
+          false;
+
+        this.patchStatus({
+          backgroundSuspended: false,
+          message:
+            "Capture is paused after returning from the background. Resume to restart the camera.",
+        });
+
         return;
       }
 

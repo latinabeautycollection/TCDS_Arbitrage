@@ -271,3 +271,32 @@ behaviour is added, changed or owned by the scanner slice.
 **Test added.** `diagnosticsEntry`: opens for a signed-in session, opens under temporary preview access with
 no session, and offers nothing at all when neither applies.
 **Certification result.** PASS. Capture suite 52/52.
+
+---
+
+## CR-6.2B-18 — Return from a background paused in an installed web app
+
+**Finding.** On a device, an installed web app asked for camera permission again every time it was
+backgrounded while the camera was live. Recorded as observation D-1 in the device evidence.
+
+**Root cause.** The platform, not the slice: an installed web app does not keep its camera grant across a
+background, while a browser tab does. The same code never prompts in Safari or Chrome. The scanner restored
+the session automatically on return, so the prompt appeared on its own, with no operator action behind it.
+
+**Affected files.** `src/lib/scanning/capture/displayMode.ts` (new),
+`src/lib/scanning/providers/scandit/ScanditBarcodeCaptureController.ts`.
+
+**Fix.** In an installed web app the session now returns **paused**: no camera is requested on the way back,
+and the status says so. The operator's own resume restarts the camera, so the platform's prompt follows
+their tap instead of appearing unbidden. In a browser tab the previous behaviour is unchanged, because the
+grant survives there. Screen lock and unlock are unaffected: they do not background the application.
+
+The prompt itself cannot be removed by the application; this makes it predictable and stops the scanner
+asking for a camera nobody requested.
+
+**Test added.** `captureLifecycle`: "comes back paused from a background in an installed web app" — no camera
+start on return, phase PAUSED, capture disabled, and the explicit resume starts the camera. Plus "still
+restores capture after a background in a browser tab", which guards the unchanged path.
+
+**Certification result.** PASS. Capture suite 54/54. Against the previous controller the installed-app test
+fails, and the browser-tab test passes on both.
