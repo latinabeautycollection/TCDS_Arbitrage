@@ -73,6 +73,8 @@ behind sign-in.
 - A restart always releases the previous attempt first, including after a timeout or a failure.
 - Leaving the page during startup cancels the startup and releases the camera, listeners and view.
 - A failed or blocked scanner is not suspended as a background session and does not return as ready.
+- In an installed web app the session returns from a background paused, because the platform drops the
+  camera grant there; the operator's own resume restarts the camera. In a browser tab it resumes as before.
 - A recognised camera or runtime status code is authoritative and never reads as ready.
 - Errors that leave the provider carry a code, a message, retryability and cleanup steps, with the
   underlying exception reduced to a redacted summary.
@@ -83,7 +85,7 @@ The delivered suite tests contracts and models. We added a fake Scandit SDK, wri
 type definitions and observed behaviour, and the real controller and hook run against it. That is what makes
 the lifecycle rules above verifiable rather than described.
 
-Current totals: runtime suite 54, capture suite 52.
+Current totals: runtime suite 54, capture suite 54.
 
 ## 7. The real-device matrix
 

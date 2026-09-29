@@ -88,5 +88,5 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
   recommended camera settings, and picture-in-picture being disabled.
 - The real-device matrix is complete: **39 checks, 0 failures**, on iPhone 17 / iOS 27.0 in Safari, the
   installed Home Screen web app and Chrome for iOS. See `DEVICE_TEST_EVIDENCE.md`.
-- Automated totals: runtime suite **54/54**, capture suite **52/52**, strict TypeScript PASS, build PASS,
+- Automated totals: runtime suite **54/54**, capture suite **54/54**, strict TypeScript PASS, build PASS,
   runtime, cache and version parity PASS, boundary PASS, protected-feature check PASS, CI PASS.

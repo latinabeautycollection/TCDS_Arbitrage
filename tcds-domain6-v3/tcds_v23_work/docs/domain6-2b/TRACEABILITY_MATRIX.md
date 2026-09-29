@@ -44,7 +44,7 @@
 | Evidence | Result |
 |---|---|
 | runtime slice still 54/54 | PASS |
-| updated capture suite fully passing | PASS — 52/52 |
+| updated capture suite fully passing | PASS — 54/54 |
 | strict TypeScript | PASS, with library checking enabled |
 | production build | PASS, offline cache regenerated |
 | runtime, cache and version parity | PASS — 8.5.3, 44 runtime files, built output and cache match the manifest |
@@ -77,7 +77,8 @@ Chrome for iOS. **39 checks, 0 failures.** Full record and the seven observation
 
 ## F. Open items
 
-1. A decision on the device observations, in particular D-1 (platform permission behaviour in the installed
-   web app) and D-3 (safe areas in the application shell).
+1. D-1 is addressed by CR-6.2B-18: the installed web app returns from a background paused. Awaiting the
+   device re-check of that one behaviour.
+2. D-3 (safe areas) belongs to the application shell and is handled with the shell build.
 2. Returning the shared deployment to its secure posture once the evidence is accepted.
 3. Mid-session camera loss and the detailed capture-policy definitions, both deferred to 6.2C.

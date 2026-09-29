@@ -544,6 +544,92 @@ describe("6.2B capture lifecycle", () => {
     ).toBe("CAPTURING");
   });
 
+  it("comes back paused from a background in an installed web app", async () => {
+    Object.defineProperty(
+      window.navigator,
+      "standalone",
+      {
+        configurable: true,
+        value: true,
+      },
+    );
+
+    try {
+      const harness = createHarness();
+
+      await harness.controller.start({
+        viewportElement:
+          harness.viewportElement,
+      });
+
+      const camera = sdk.camera;
+      const startsBefore =
+        camera.startCalls;
+
+      await harness.controller.suspendForBackground();
+      await harness.controller.resumeFromBackground();
+
+      // No camera is requested on return, so the platform cannot raise a
+      // permission prompt the operator did not ask for.
+      expect(camera.startCalls).toBe(
+        startsBefore,
+      );
+      expect(camera.state).toBe("off");
+      expect(
+        harness.controller.getStatus()
+          .phase,
+      ).toBe("PAUSED");
+      expect(
+        harness.controller.getStatus()
+          .backgroundSuspended,
+      ).toBe(false);
+      expect(
+        harness.controller.getStatus()
+          .captureEnabled,
+      ).toBe(false);
+
+      // The operator's own resume starts the camera again.
+      await harness.controller.resume();
+
+      expect(camera.startCalls).toBe(
+        startsBefore + 1,
+      );
+      expect(
+        harness.controller.getStatus()
+          .phase,
+      ).toBe("CAPTURING");
+    } finally {
+      Reflect.deleteProperty(
+        window.navigator,
+        "standalone",
+      );
+    }
+  });
+
+  it("still restores capture after a background in a browser tab", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    const camera = sdk.camera;
+    const startsBefore =
+      camera.startCalls;
+
+    await harness.controller.suspendForBackground();
+    await harness.controller.resumeFromBackground();
+
+    expect(camera.startCalls).toBe(
+      startsBefore + 1,
+    );
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("CAPTURING");
+  });
+
   it("rejects a decode that arrives from a previous session", async () => {
     const harness = createHarness();
 

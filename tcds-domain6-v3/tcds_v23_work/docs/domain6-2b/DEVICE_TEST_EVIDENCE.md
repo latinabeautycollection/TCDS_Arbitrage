@@ -77,9 +77,10 @@ discussion in 2026, with other barcode-scanning web apps reporting the same beha
 notes that a persistent grant set in Safari reverts to "ask" once the application is opened from the Home
 Screen.
 
-The prompt cannot be removed by the application. What can be improved is when it appears: in standalone
-mode the scanner could return from a background **paused**, so the prompt follows the operator's own tap
-rather than appearing unbidden. We have not made that change; it is offered for decision.
+The prompt cannot be removed by the application. What was improved is when it appears: in an installed web
+app the scanner now returns from a background **paused**, so the prompt follows the operator's own resume
+rather than appearing unbidden. See CR-6.2B-18. A browser tab is unchanged, and screen lock and unlock are
+unaffected.
 
 ### D-2 — first launch cost
 
