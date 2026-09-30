@@ -30,7 +30,12 @@
     "scandit:capture:verify-sdk": "node scripts/scandit/verify-domain6-2b-sdk-version.mjs",
     "scandit:capture:verify-legacy": "node scripts/scandit/verify-legacy-scandit-adapter-absent.mjs",
     "scandit:capture:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2b.tsconfig.json",
-    "scandit:capture:migrate-retire-legacy": "node scripts/scandit/retire-legacy-scandit-adapter.mjs"
+    "scandit:capture:migrate-retire-legacy": "node scripts/scandit/retire-legacy-scandit-adapter.mjs",
+    "scandit:policy:manifest": "node scripts/scandit/generate-domain6-2c-policy-manifest.mjs",
+    "scandit:policy:architecture": "node scripts/scandit/verify-domain6-2c-boundary.mjs",
+    "scandit:policy:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2c.tsconfig.json",
+    "scandit:policy:test": "vitest run --config config/vitest/scandit-6.2c.vitest.config.ts",
+    "scandit:policy:certify": "npm run scandit:capture:certify && npm run scandit:policy:manifest && npm run scandit:policy:architecture && npm run scandit:policy:typecheck && npm run scandit:policy:test && npm run build"
   },
   "dependencies": {
     "@scandit/web-datacapture-barcode": "8.5.3",

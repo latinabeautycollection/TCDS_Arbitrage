@@ -1,0 +1,47 @@
+name: Domain 6.2C Scandit Policy Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: "Full 40-character SHA after certified 6.2B and before 6.2C"
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - "src/lib/scanning/policy/**"
+      - "src/components/scanning/policy/**"
+      - "tests/scanning-6.2c/**"
+      - "scripts/scandit/verify-domain6-2c-boundary.mjs"
+      - "scripts/scandit/generate-domain6-2c-policy-manifest.mjs"
+      - "config/typescript/scandit-6.2c.tsconfig.json"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    env:
+      DOMAIN6_2C_BASELINE_SHA: ${{ github.event.pull_request.base.sha || inputs.baseline_sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate production baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DOMAIN6_2C_BASELINE_SHA" =~ ^[0-9a-fA-F]{40}$ ]]
+          git cat-file -e "${DOMAIN6_2C_BASELINE_SHA}^{commit}"
+
+      - run: npm ci
+      - run: npm run scandit:policy:certify
+      - run: npm run check --if-present
+      - run: npm run verify --if-present

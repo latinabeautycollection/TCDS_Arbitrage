@@ -1,0 +1,26 @@
+# 6.2C Green Tier 1 Certification
+
+- [ ] certified 6.2A present
+- [ ] certified production-hardened 6.2B present
+- [ ] DOMAIN6_2C_BASELINE_SHA is valid and available
+- [ ] 6.2C changes no 6.2B implementation file
+- [ ] 6.2C changes no Domain 6 business feature
+- [ ] zero SQL
+- [ ] zero @scandit imports in 6.2C
+- [ ] zero DataCaptureView / BarcodeCaptureSettings ownership in 6.2C
+- [ ] zero AudioContext / navigator.vibrate execution in 6.2C
+- [ ] authoritative scanner asset ID required
+- [ ] HID keyboard configuration rejected for camera path
+- [ ] continuous scan configuration rejected
+- [ ] unsupported configured symbology fails closed
+- [ ] disabled database symbologies cannot become effective
+- [ ] context envelope cannot widen Warehouse Control config
+- [ ] Warehouse Control config cannot widen 6.2B capability
+- [ ] duplicate_suppression_ms conversion test passes
+- [ ] policy lineage includes registryVersion/context/revision
+- [ ] no warehouse entity IDs in BarcodeCaptureExecutionPolicy
+- [ ] no warehouse outcome fields in BarcodeCaptureExecutionPolicy
+- [ ] tests pass
+- [ ] typecheck passes
+- [ ] production build passes
+- [ ] existing Domain 6 check/verify remains green
