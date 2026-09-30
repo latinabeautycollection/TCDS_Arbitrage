@@ -108,9 +108,49 @@ if (!changed.length) {
   process.exit(1);
 }
 
+// Git reports changed paths from the repository root, while the 6.2C ownership
+// rules are written against the application root. The application prefix is
+// removed before every prefix comparison, so the rules also apply when the
+// application is nested inside the repository. Reported paths stay unchanged.
+let applicationPrefix = "";
+
+try {
+  const repositoryRoot =
+    git([
+      "rev-parse",
+      "--show-toplevel",
+    ]).replaceAll("\\", "/");
+
+  const nested =
+    path.relative(
+      repositoryRoot,
+      root,
+    ).replaceAll("\\", "/");
+
+  applicationPrefix =
+    nested && nested !== "."
+      ? `${nested}/`
+      : "";
+} catch {
+  applicationPrefix = "";
+}
+
+export function toApplicationPath(
+  rel,
+  prefix = applicationPrefix,
+) {
+  return prefix &&
+    rel.startsWith(prefix)
+    ? rel.slice(prefix.length)
+    : rel;
+}
+
 const violations = [];
 
 for (const rel of changed) {
+  const applicationRel =
+    toApplicationPath(rel);
+
   if (
     rel.endsWith(".sql")
   ) {
@@ -122,7 +162,7 @@ for (const rel of changed) {
   if (
     forbiddenPrefixes.some(
       (prefix) =>
-        rel.startsWith(prefix),
+        applicationRel.startsWith(prefix),
     )
   ) {
     violations.push(
@@ -131,10 +171,10 @@ for (const rel of changed) {
   }
 
   if (
-    rel.startsWith("src/") &&
+    applicationRel.startsWith("src/") &&
     !allowedPrefixes.some(
       (prefix) =>
-        rel.startsWith(prefix),
+        applicationRel.startsWith(prefix),
     )
   ) {
     violations.push(

@@ -1,3 +1,10 @@
+// RESERVED FOR LATER DIAGNOSTIC / OBSERVABILITY INTEGRATION
+// NOT WIRED BY 6.2C
+//
+// 6.2C deliberately does not render this card. Wiring it would change a
+// diagnostic page outside the 6.2C ownership allowlist, which the slice's
+// own boundary verification rejects. Display belongs to a later slice.
+
 import type {
   ResolvedWarehouseCapturePolicy,
 } from "../../../lib/scanning/policy/CapturePolicyResolution";
