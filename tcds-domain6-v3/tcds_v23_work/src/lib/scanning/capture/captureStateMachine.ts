@@ -15,6 +15,10 @@ const FAILURE_PHASES = [
 const operationalFailures =
   FAILURE_PHASES as readonly BarcodeCapturePhase[];
 
+// A capture session can be blocked by the runtime at any moment, for example
+// when licensing or runtime authorization is withdrawn. BLOCKED is therefore
+// reachable from every live phase, and leaves only through STOPPED, so a new
+// session always starts from a released one.
 const TRANSITIONS: Readonly<
   Record<BarcodeCapturePhase, readonly BarcodeCapturePhase[]>
 > = {
@@ -23,17 +27,20 @@ const TRANSITIONS: Readonly<
     "PERMISSION_PENDING",
     "CAMERA_STARTING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   PERMISSION_PENDING: [
     "CAMERA_STARTING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   CAMERA_STARTING: [
     "READY",
     "CAPTURING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   READY: [
@@ -41,6 +48,7 @@ const TRANSITIONS: Readonly<
     "PAUSED",
     "RECOVERING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   CAPTURING: [
@@ -48,11 +56,13 @@ const TRANSITIONS: Readonly<
     "PAUSED",
     "RECOVERING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   DECODED: [
     "PAUSED",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   PAUSED: [
@@ -61,6 +71,7 @@ const TRANSITIONS: Readonly<
     "CAPTURING",
     "RECOVERING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   PERMISSION_DENIED: [
@@ -89,6 +100,7 @@ const TRANSITIONS: Readonly<
     "READY",
     "CAPTURING",
     ...operationalFailures,
+    "BLOCKED",
     "STOPPED",
   ],
   BLOCKED: ["STOPPED"],

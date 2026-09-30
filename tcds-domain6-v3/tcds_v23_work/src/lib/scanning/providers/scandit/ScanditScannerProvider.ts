@@ -523,6 +523,18 @@ export class ScanditScannerProvider
 
     assertRuntimeInvariant(this.status);
 
+    // Capture may only run while the runtime authorizes it. A blocked or failed
+    // runtime releases the camera instead of holding it open for a decode that
+    // cannot happen.
+    void this.captureController
+      .applyRuntimeAuthorization({
+        blocked:
+          this.status.blocked ||
+          this.status.phase === 'FAILED',
+        message: this.status.message,
+      })
+      .catch(() => undefined);
+
     const type =
       forcedType ??
       (this.status.phase === 'BLOCKED'
