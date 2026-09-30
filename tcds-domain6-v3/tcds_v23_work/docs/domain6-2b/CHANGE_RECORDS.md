@@ -300,3 +300,33 @@ restores capture after a background in a browser tab", which guards the unchange
 
 **Certification result.** PASS. Capture suite 54/54. Against the previous controller the installed-app test
 fails, and the browser-tab test passes on both.
+
+---
+
+## CR-6.2B-19 — Release the camera when the runtime withdraws authorization
+
+**Finding.** With the runtime blocked by licensing, the capture session kept running: phase CAPTURING,
+camera on, capture enabled, while no decode was possible. Observed on a device when the licence expired.
+
+**Root cause.** The capture session had no link to runtime authorization. Runtime status and capture status
+were reported side by side but never connected, so a runtime block could not reach the session.
+
+**Affected files.** `src/lib/scanning/capture/captureStateMachine.ts`,
+`src/lib/scanning/providers/scandit/ScanditBarcodeCaptureController.ts`,
+`src/lib/scanning/providers/scandit/ScanditScannerProvider.ts`.
+
+**Fix.** The runtime reports authorization to the capture session. When it is withdrawn the session leaves
+CAPTURING, releases the camera, listener, view and capture mode, and moves to BLOCKED carrying the
+runtime's own sanitized reason and a status code. Resume is refused while blocked, and a background and
+return does not reopen the camera behind it. When authorization returns nothing restarts by itself: the
+next explicit Start runs a clean new session.
+
+BLOCKED is now reachable from every live phase. It was previously reachable only from IDLE, which made the
+state unreachable exactly when it was needed. It still leaves only through STOPPED, so a new session always
+begins from a released one. No new phase, no new code and no change to any other transition.
+
+**Test added.** `captureLifecycle`, four cases: the camera is released and the reason is shown; resume is
+refused while blocked; a background and return does not reopen it; and a new Start scans normally once
+authorization returns.
+
+**Certification result.** PASS. Capture suite 58/58. All four tests fail against the previous controller.

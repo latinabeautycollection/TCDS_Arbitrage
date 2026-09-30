@@ -44,7 +44,7 @@
 | Evidence | Result |
 |---|---|
 | runtime slice still 54/54 | PASS |
-| updated capture suite fully passing | PASS — 54/54 |
+| updated capture suite fully passing | PASS — 58/58 |
 | strict TypeScript | PASS, with library checking enabled |
 | production build | PASS, offline cache regenerated |
 | runtime, cache and version parity | PASS — 8.5.3, 44 runtime files, built output and cache match the manifest |

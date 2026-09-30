@@ -63,6 +63,7 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
 | ✅ | Zoom availability is capability-driven | PASS | reported from the camera controls, never assumed |
 | ✅ | Impossible state transitions fail closed | PASS | `captureStateMachine` and `captureStateMachine.hardened` |
 | ✅ | A camera or runtime error never reads as READY | PASS | `runtimeErrorMapping` |
+| ✅ | A blocked runtime releases the camera | PASS | `captureLifecycle`: session released, phase BLOCKED, reason shown, resume refused |
 | ✅ | Raw provider exceptions never cross the boundary | PASS | `captureLifecycle` checks the capture error and the cleanup record |
 | ✅ | A failure is readable on the device surface | PASS | `diagnosticStatusSurface` |
 
@@ -88,5 +89,5 @@ DOMAIN6_2B_BASELINE_SHA=<last 6.2A commit> npm run scandit:capture:certify
   recommended camera settings, and picture-in-picture being disabled.
 - The real-device matrix is complete: **39 checks, 0 failures**, on iPhone 17 / iOS 27.0 in Safari, the
   installed Home Screen web app and Chrome for iOS. See `DEVICE_TEST_EVIDENCE.md`.
-- Automated totals: runtime suite **54/54**, capture suite **54/54**, strict TypeScript PASS, build PASS,
+- Automated totals: runtime suite **54/54**, capture suite **58/58**, strict TypeScript PASS, build PASS,
   runtime, cache and version parity PASS, boundary PASS, protected-feature check PASS, CI PASS.
