@@ -630,6 +630,184 @@ describe("6.2B capture lifecycle", () => {
     ).toBe("CAPTURING");
   });
 
+  it("releases the camera when the runtime withdraws authorization", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    const camera = sdk.camera;
+    const capture = sdk.capture;
+    const view = sdk.views[0];
+
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("CAPTURING");
+
+    await harness.controller.applyRuntimeAuthorization(
+      {
+        blocked: true,
+        message:
+          "Scanner runtime is blocked by licensing.",
+      },
+    );
+
+    const status =
+      harness.controller.getStatus();
+
+    // Nothing can decode while the runtime is blocked, so nothing is held open.
+    expect(status.phase).toBe("BLOCKED");
+    expect(status.captureEnabled).toBe(
+      false,
+    );
+    expect(status.cameraOn).toBe(false);
+    expect(camera.state).toBe("off");
+    expect(
+      capture.removedListeners,
+    ).toBe(1);
+    expect(
+      harness.context.removedModes,
+    ).toContain(capture);
+    expect(view?.detachCount).toBe(1);
+
+    // The operator is told why, in the runtime's own sanitized words.
+    expect(status.message).toContain(
+      "blocked by licensing",
+    );
+    expect(status.lastErrorCode).toBe(
+      "RUNTIME_NOT_READY",
+    );
+  });
+
+  it("refuses to resume while the runtime is blocked", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    const camera = sdk.camera;
+
+    await harness.controller.applyRuntimeAuthorization(
+      { blocked: true },
+    );
+
+    const startsAfterBlock =
+      camera.startCalls;
+
+    const error = await harness.controller
+      .resume()
+      .catch(
+        (reason: unknown) => reason,
+      );
+
+    expect(error).toBeInstanceOf(
+      BarcodeCaptureError,
+    );
+    expect(
+      (error as BarcodeCaptureError).code,
+    ).toBe("RUNTIME_NOT_READY");
+
+    // Resume did not reopen the camera behind the block.
+    expect(camera.startCalls).toBe(
+      startsAfterBlock,
+    );
+    expect(camera.state).toBe("off");
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("BLOCKED");
+  });
+
+  it("does not come back from a background while the runtime is blocked", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    const camera = sdk.camera;
+
+    await harness.controller.applyRuntimeAuthorization(
+      { blocked: true },
+    );
+
+    const startsAfterBlock =
+      camera.startCalls;
+
+    await harness.controller.suspendForBackground();
+    await harness.controller.resumeFromBackground();
+
+    expect(camera.startCalls).toBe(
+      startsAfterBlock,
+    );
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("BLOCKED");
+    expect(
+      harness.controller.getStatus()
+        .backgroundSuspended,
+    ).toBe(false);
+  });
+
+  it("starts normally again once the runtime authorizes capture", async () => {
+    const harness = createHarness();
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    await harness.controller.applyRuntimeAuthorization(
+      { blocked: true },
+    );
+
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("BLOCKED");
+
+    const camerasWhileBlocked =
+      sdk.cameras.length;
+
+    await harness.controller.applyRuntimeAuthorization(
+      { blocked: false },
+    );
+
+    // Authorization alone restarts nothing: the operator starts a new session.
+    expect(sdk.cameras).toHaveLength(
+      camerasWhileBlocked,
+    );
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("BLOCKED");
+
+    await harness.controller.start({
+      viewportElement:
+        harness.viewportElement,
+    });
+
+    expect(
+      harness.controller.getStatus()
+        .phase,
+    ).toBe("CAPTURING");
+    expect(sdk.camera.state).toBe("on");
+
+    sdk.emitScan("AFTER-UNBLOCK");
+    await flush();
+
+    expect(
+      harness.observations,
+    ).toHaveLength(1);
+  });
+
   it("rejects a decode that arrives from a previous session", async () => {
     const harness = createHarness();
 

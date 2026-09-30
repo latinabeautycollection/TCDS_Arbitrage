@@ -108,6 +108,11 @@ export class ScanditBarcodeCaptureController {
   private captureStartedAtMs = 0;
   private wasActiveBeforeBackground = false;
 
+  // Set while the runtime withholds authorization, for example when licensing
+  // is rejected. Capture stays closed until the runtime authorizes again.
+  private runtimeBlocked = false;
+  private runtimeBlockedMessage: string | undefined;
+
   private status: BarcodeCaptureStatus = {
     phase: "IDLE",
     provider: "scandit",
@@ -278,6 +283,91 @@ export class ScanditBarcodeCaptureController {
     return { ...this.status };
   }
 
+  /**
+   * Reports whether the runtime still authorizes capture.
+   *
+   * A blocked runtime cannot decode anything, so holding the camera open would
+   * light the device indicator and drain the battery for nothing. The session is
+   * released and the phase becomes BLOCKED with a message the operator can act
+   * on. Authorization returning does not restart anything by itself: the
+   * operator starts a new session.
+   */
+  applyRuntimeAuthorization(
+    authorization: {
+      blocked: boolean;
+      message?: string;
+    },
+  ): Promise<void> {
+    if (!authorization.blocked) {
+      this.runtimeBlocked = false;
+      this.runtimeBlockedMessage = undefined;
+      return Promise.resolve();
+    }
+
+    this.runtimeBlocked = true;
+    this.runtimeBlockedMessage =
+      authorization.message;
+
+    return this.enqueue(async () => {
+      if (
+        this.status.phase === "IDLE" ||
+        this.status.phase === "STOPPED" ||
+        this.status.phase === "BLOCKED"
+      ) {
+        return;
+      }
+
+      this.clearCaptureTimeout();
+      this.wasActiveBeforeBackground = false;
+
+      let cleanupFailure:
+        | BarcodeCaptureError
+        | undefined;
+
+      try {
+        await this.cleanupResources();
+      } catch (error) {
+        cleanupFailure =
+          error instanceof BarcodeCaptureError
+            ? error
+            : new BarcodeCaptureError(
+                "CAPTURE_CLEANUP_FAILED",
+                "The scanner was blocked by the runtime and resources were not released cleanly.",
+                true,
+                error,
+              );
+      }
+
+      this.transition("BLOCKED", {
+        captureEnabled: false,
+        cameraOn: false,
+        backgroundSuspended: false,
+        lastErrorCode: "RUNTIME_NOT_READY",
+        message:
+          this.runtimeBlockedMessage ??
+          "Scanner is blocked by the runtime. Capture cannot run until it is authorized again.",
+      });
+
+      if (cleanupFailure) {
+        this.handleCleanupFailureWhileBlocked(
+          cleanupFailure,
+        );
+      }
+    });
+  }
+
+  private handleCleanupFailureWhileBlocked(
+    failure: BarcodeCaptureError,
+  ): void {
+    // The blocked state is the operator-facing truth; the cleanup detail is
+    // recorded on it rather than replacing it.
+    this.patchStatus({
+      message: `${
+        this.status.message ?? ""
+      } ${failure.message}`.trim(),
+    });
+  }
+
   subscribeToScans(
     listener: BarcodeDecodeListener,
   ): () => void {
@@ -326,6 +416,15 @@ export class ScanditBarcodeCaptureController {
   private async startInternal(
     options: BarcodeCaptureStartOptions,
   ): Promise<void> {
+    if (this.runtimeBlocked) {
+      throw new BarcodeCaptureError(
+        "RUNTIME_NOT_READY",
+        this.runtimeBlockedMessage ??
+          "Scanner is blocked by the runtime and cannot start.",
+        false,
+      );
+    }
+
     if (!(options.viewportElement instanceof HTMLElement)) {
       throw new BarcodeCaptureError(
         "VIEWPORT_REQUIRED",
@@ -618,6 +717,16 @@ export class ScanditBarcodeCaptureController {
   }
 
   private async resumeInternal(): Promise<void> {
+    if (this.runtimeBlocked) {
+      // Resume must never bypass a runtime block.
+      throw new BarcodeCaptureError(
+        "RUNTIME_NOT_READY",
+        this.runtimeBlockedMessage ??
+          "Scanner is blocked by the runtime and cannot resume.",
+        false,
+      );
+    }
+
     if (
       this.status.phase === "CAPTURING"
     ) {
@@ -1071,6 +1180,10 @@ export class ScanditBarcodeCaptureController {
   }
 
   private isUnrecoverablePhase(): boolean {
+    if (this.runtimeBlocked) {
+      return true;
+    }
+
     return (
       this.status.phase ===
         "PERMISSION_DENIED" ||

@@ -21,6 +21,7 @@ and are not fixed, so the slice stays inside its approved scope.
 | B-13 | Low | Mid-session camera loss is not detected | Deferred to 6.2C |
 | B-14 | Low | Capture-policy details that matter to the next slice | Deferred to 6.2C |
 | D-1 … D-7 | — | Observations from the real-device run | See `DEVICE_TEST_EVIDENCE.md` |
+| D-8 | Medium | Capture kept the camera open while the runtime was licence-blocked | Closed — CR-6.2B-19 |
 
 ---
 
