@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": false
+  },
+  "include": [
+    "../../src/vite-env.d.ts",
+    "../../src/lib/scanning/capture/**/*.ts",
+    "../../src/lib/scanning/workflow/**/*.ts",
+    "../../src/hooks/useBarcodeScanner.ts",
+    "../../src/hooks/useWarehouseWorkflowScanner.ts"
+  ]
+}
