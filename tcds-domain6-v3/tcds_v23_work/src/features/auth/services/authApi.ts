@@ -1,92 +1,23 @@
-import type { AuthenticationOptionsJSON, AuthenticationResponseJSON } from './webauthnClient';
-import type { ApiProblem, AuthBootstrap, AuthSession, LoginRequest, PasskeyAvailability } from '../types/authTypes';
+import type {ApiErrorPayload,AuthenticationOptionsEnvelope,AuthenticationResponseJSON,BackendSessionEnvelope,DeviceEnrollmentProfile,DeviceProofOptions,DeviceProofVerifyRequest,RegistrationOptionsEnvelope,RegistrationResponseJSON,VerifierResultV1} from '../types/authTypes';
+import {deviceCredentialStore} from '../storage/deviceCredentialStore';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '');
-const REQUEST_TIMEOUT_MS = Number(import.meta.env.VITE_AUTH_REQUEST_TIMEOUT_MS ?? 12000);
-
-export class AuthApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly requestId?: string;
-  readonly retryAfterSeconds?: number;
-
-  constructor(problem: ApiProblem, fallbackStatus = 500) {
-    super(problem.detail ?? problem.title ?? 'Authentication request failed.');
-    this.name = 'AuthApiError';
-    this.status = problem.status ?? fallbackStatus;
-    this.code = problem.code ?? 'AUTH_REQUEST_FAILED';
-    this.requestId = problem.requestId;
-    this.retryAfterSeconds = problem.retryAfterSeconds;
-  }
-}
-
-function createHeaders(includeJson = false): Headers {
-  const headers = new Headers();
-  if (includeJson) headers.set('Content-Type', 'application/json');
-  headers.set('Accept', 'application/json');
-  headers.set('X-Request-ID', crypto.randomUUID());
-  headers.set('X-Correlation-ID', crypto.randomUUID());
-  headers.set('X-TCDS-App-Version', import.meta.env.VITE_APP_VERSION ?? '3.1.1-login');
-
-  const deviceId = localStorage.getItem('tcds.device.installationId');
-  if (deviceId) headers.set('X-TCDS-Device-ID', deviceId);
-  return headers;
-}
-
-async function request<T>(path: string, init: RequestInit = {}, externalSignal?: AbortSignal): Promise<T> {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort('timeout'), REQUEST_TIMEOUT_MS);
-  const abortFromExternal = () => controller.abort('cancelled');
-  externalSignal?.addEventListener('abort', abortFromExternal, { once: true });
-
-  try {
-    const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      credentials: 'include',
-      cache: 'no-store',
-      headers: init.headers ?? createHeaders(Boolean(init.body)),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      let problem: ApiProblem = { status: response.status, title: 'Authentication request failed.' };
-      try { problem = { ...problem, ...(await response.json() as ApiProblem) }; } catch { /* non-JSON error */ }
-      throw new AuthApiError(problem, response.status);
-    }
-
-    if (response.status === 204) return undefined as T;
-    return response.json() as Promise<T>;
-  } catch (error) {
-    if (error instanceof AuthApiError) throw error;
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      const cancelled = externalSignal?.aborted;
-      throw new AuthApiError({
-        status: cancelled ? 499 : 504,
-        code: cancelled ? 'AUTH_CANCELLED' : 'AUTH_TIMEOUT',
-        detail: cancelled ? 'The sign-in request was cancelled.' : 'The authentication service did not respond in time.',
-      }, cancelled ? 499 : 504);
-    }
-    throw new AuthApiError({ status: 503, code: 'AUTH_NETWORK_ERROR', detail: 'The authentication service is unavailable. Check the network connection.' }, 503);
-  } finally {
-    window.clearTimeout(timeout);
-    externalSignal?.removeEventListener('abort', abortFromExternal);
-  }
-}
-
-export const authApi = {
-  bootstrap: (signal?: AbortSignal) => request<AuthBootstrap>('/api/v1/auth/bootstrap', { headers: createHeaders() }, signal),
-  session: (signal?: AbortSignal) => request<AuthSession>('/api/v1/auth/session', { headers: createHeaders() }, signal),
-  login: (payload: LoginRequest, signal?: AbortSignal) => request<AuthSession>('/api/v1/auth/login', {
-    method: 'POST', headers: createHeaders(true), body: JSON.stringify(payload),
-  }, signal),
-  logout: (signal?: AbortSignal) => request<void>('/api/v1/auth/logout', { method: 'POST', headers: createHeaders(true), body: '{}' }, signal),
-  passkeyAvailability: (identifier: string, signal?: AbortSignal) => request<PasskeyAvailability>('/api/v1/auth/passkeys/availability', {
-    method: 'POST', headers: createHeaders(true), body: JSON.stringify({ identifier }),
-  }, signal),
-  passkeyAuthenticationOptions: (identifier: string, signal?: AbortSignal) => request<AuthenticationOptionsJSON>('/api/v1/auth/passkeys/authentication/options', {
-    method: 'POST', headers: createHeaders(true), body: JSON.stringify({ identifier }),
-  }, signal),
-  verifyPasskeyAuthentication: (response: AuthenticationResponseJSON, signal?: AbortSignal) => request<AuthSession>('/api/v1/auth/passkeys/authentication/verify', {
-    method: 'POST', headers: createHeaders(true), body: JSON.stringify(response),
-  }, signal),
+const BASE=(import.meta.env.VITE_API_BASE_URL??'').replace(/\/$/,'');
+const TIMEOUT=Number(import.meta.env.VITE_AUTH_REQUEST_TIMEOUT_MS??12000);
+export class AuthApiError extends Error{status:number;code:string;requestId?:string;retryAfterSeconds?:number;constructor(status:number,payload:ApiErrorPayload={}){const e=payload.error??payload;super(e.message??'Authentication request failed.');this.name='AuthApiError';this.status=status;this.code=e.code??'AUTH_REQUEST_FAILED';this.requestId=e.requestId;this.retryAfterSeconds=e.retryAfterSeconds;}}
+// TCDS R11-13: R11 binds device-proof evidence to the request/correlation ids of its ceremony.
+let ceremonyIds:{requestId:string;correlationId:string}|null=null;
+export async function inCeremony<T>(work:()=>Promise<T>):Promise<T>{ceremonyIds={requestId:crypto.randomUUID(),correlationId:crypto.randomUUID()};try{return await work()}finally{ceremonyIds=null}}
+async function headers(json:boolean,authenticated:boolean):Promise<Headers>{const h=new Headers({'Accept':'application/json','X-Request-ID':ceremonyIds?.requestId??crypto.randomUUID(),'X-Correlation-ID':ceremonyIds?.correlationId??crypto.randomUUID(),'X-TCDS-App-Version':import.meta.env.VITE_APP_VERSION??'6.1D'});if(json)h.set('Content-Type','application/json');if(authenticated){const secrets=await deviceCredentialStore.secrets();if(secrets?.deviceAssertion)h.set('X-TCDS-Device-Assertion',secrets.deviceAssertion);const csrf=document.cookie.split('; ').find(x=>x.startsWith('__Host-tcds_csrf='))?.split('=').slice(1).join('=');if(csrf)h.set('X-CSRF-Token',decodeURIComponent(csrf));}return h;}
+async function request<T>(path:string,init:RequestInit={},authenticated=false,signal?:AbortSignal):Promise<T>{const c=new AbortController(),timer=window.setTimeout(()=>c.abort(),TIMEOUT),relay=()=>c.abort();signal?.addEventListener('abort',relay,{once:true});try{const r=await fetch(`${BASE}${path}`,{...init,headers:init.headers??await headers(Boolean(init.body),authenticated),credentials:'include',cache:'no-store',signal:c.signal});if(!r.ok){let p:ApiErrorPayload={};try{p=await r.json() as ApiErrorPayload}catch{}throw new AuthApiError(r.status,p)}if(r.status===204)return undefined as T;return await r.json() as T;}catch(e){if(e instanceof AuthApiError)throw e;if(c.signal.aborted)throw new AuthApiError(signal?.aborted?499:504,{error:{code:signal?.aborted?'AUTH_CANCELLED':'AUTH_TIMEOUT',message:signal?.aborted?'Sign-in cancelled.':'Authentication service timed out.'}});throw new AuthApiError(503,{error:{code:'AUTH_NETWORK_ERROR',message:'Secure authentication service is unavailable.'}});}finally{clearTimeout(timer);signal?.removeEventListener('abort',relay)}}
+export const authApi={
+ ready:(signal?:AbortSignal)=>request<{ready:boolean;postgres?:boolean;redis?:boolean;database?:boolean}>('/api/v1/auth/ready',{},false,signal),
+ session:(signal?:AbortSignal)=>request<BackendSessionEnvelope>('/api/v1/auth/session',{},true,signal),
+ deviceProofOptions:(profile:DeviceEnrollmentProfile,purpose:'PASSWORD_LOGIN'|'SESSION_STEP_UP',signal?:AbortSignal)=>request<DeviceProofOptions>('/api/v1/auth/device-proof/options',{method:'POST',body:JSON.stringify({deviceId:profile.deviceId,credentialId:profile.credentialId,purpose})},false,signal),
+ deviceProofVerify:(profile:DeviceEnrollmentProfile,challengeId:string,rawNonce:string,signatureBase64url:string,signal?:AbortSignal)=>{const body:DeviceProofVerifyRequest={deviceId:profile.deviceId,challengeId,rawNonce,signatureBase64url};return request<VerifierResultV1>('/api/v1/auth/device-proof/verify',{method:'POST',body:JSON.stringify(body)},false,signal)},
+ passwordLogin:(profile:DeviceEnrollmentProfile,identifier:string,password:string,deviceProofEvidenceId:string,signal?:AbortSignal)=>request<BackendSessionEnvelope>('/api/v1/auth/password/login',{method:'POST',body:JSON.stringify({identifier,password,deviceId:profile.deviceId,facilityId:profile.facilityId,stationId:profile.stationId??undefined,deviceProofEvidenceId})},false,signal),
+ passkeyAuthenticationOptions:(profile:DeviceEnrollmentProfile,identifier:string,signal?:AbortSignal)=>request<AuthenticationOptionsEnvelope>('/api/v1/auth/passkeys/authentication/options',{method:'POST',body:JSON.stringify({identifier,deviceId:profile.deviceId})},false,signal),
+ passkeyAuthenticationVerify:(profile:DeviceEnrollmentProfile,challengeId:string,response:AuthenticationResponseJSON,signal?:AbortSignal)=>request<BackendSessionEnvelope>('/api/v1/auth/passkeys/authentication/verify',{method:'POST',body:JSON.stringify({deviceId:profile.deviceId,challengeId,response})},false,signal),
+ passkeyRegistrationOptions:(profile:DeviceEnrollmentProfile,signal?:AbortSignal)=>request<RegistrationOptionsEnvelope>('/api/v1/auth/passkeys/registration/options',{method:'POST',body:JSON.stringify({deviceId:profile.deviceId})},true,signal),
+ passkeyRegistrationVerify:(profile:DeviceEnrollmentProfile,challengeId:string,response:RegistrationResponseJSON,friendlyName?:string,signal?:AbortSignal)=>request<VerifierResultV1>('/api/v1/auth/passkeys/registration/verify',{method:'POST',body:JSON.stringify({deviceId:profile.deviceId,challengeId,response,friendlyName})},true,signal),
+ logout:(signal?:AbortSignal)=>request<{ok:boolean}>('/api/v1/auth/logout',{method:'POST',body:'{}'},true,signal)
 };

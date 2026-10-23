@@ -1,6 +1,6 @@
 import { useEffect, useId, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, KeyRound, LockKeyhole, RefreshCw, ShieldCheck, XCircle } from 'lucide-react';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, KeyRound, LockKeyhole, RefreshCw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BrandMark } from '../components/BrandMark';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ScreenCard } from '../components/ScreenCard';
@@ -9,36 +9,33 @@ import { AuthReadinessCard } from '../features/auth/components/AuthReadinessCard
 import { LoginErrorBanner } from '../features/auth/components/LoginErrorBanner';
 import { useAuth } from '../features/auth/context/AuthContext';
 
+// Login V2 sign-in screen: the app's original design, driven by the 6.1D auth context.
 export function Login() {
   const identifierId = useId();
   const passwordId = useId();
   const navigate = useNavigate();
   const location = useLocation();
-  const {
-    state, session, bootstrap, error, isOnline, passkeyAvailable,
-    login, loginWithPasskey, checkPasskeyAvailability,
-    cancelAuthentication, retryBootstrap, clearError,
-  } = useAuth();
+  const { state, session, bootstrap, error, isOnline, login, loginWithPasskey, cancel, retryBootstrap, clearError } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/dashboard';
-  const busy = state === 'authenticating' || state === 'bootstrapping';
-  const passwordAllowed = bootstrap?.passwordEnabled !== false;
-  const platformReady = Boolean(
-    bootstrap?.passkeyEnabled &&
-    bootstrap.webAuthnSupported &&
-    bootstrap.device.registered &&
-    bootstrap.device.trusted &&
-    bootstrap.device.status === 'ACTIVE' &&
-    isOnline
-  );
-  const showPasskeyButton = platformReady && passkeyAvailable === true;
+  const signingIn = state === 'authenticating' || state === 'device-proof';
+  const busy = signingIn || state === 'bootstrapping';
+  const deviceReady = bootstrap?.deviceEnrolled === true;
+  const showPasskeyButton = Boolean(deviceReady && bootstrap?.webAuthnSupported && bootstrap?.platformAuthenticatorAvailable && isOnline);
+  const profile = bootstrap?.deviceProfile ?? null;
 
   useEffect(() => {
     if (session?.authenticated) navigate(redirectTo, { replace: true });
   }, [session?.authenticated, navigate, redirectTo]);
+
+  // The device check runs when the app starts; re-check on arrival (e.g. straight after Device setup).
+  useEffect(() => {
+    if (bootstrap && !bootstrap.deviceEnrolled) void retryBootstrap();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (session?.authenticated) return <Navigate to={redirectTo} replace />;
 
@@ -46,7 +43,7 @@ export function Login() {
     event.preventDefault();
     clearError();
     if (!identifier.trim() || !password) return;
-    try { await login({ identifier: identifier.trim(), password }); } catch { /* rendered by context */ }
+    try { await login(identifier.trim(), password); } catch { /* rendered by context */ }
   }
 
   async function submitPasskey() {
@@ -82,6 +79,21 @@ export function Login() {
           </div>
         )}
 
+        {bootstrap && !deviceReady && (
+          <ScreenCard className="border-amber-300 bg-amber-50">
+            <div className="flex items-start gap-3">
+              <Smartphone className="mt-1 shrink-0 text-amber-700" size={22} />
+              <div className="space-y-3">
+                <p className="font-display text-lg font-black text-tcds-ink">Set up this device first</p>
+                <p className="text-sm font-semibold text-amber-900">Sign-in only works on an approved warehouse device. This device has not been set up yet.</p>
+                <Link to="/device-setup" className="tcds-focus inline-flex min-h-12 items-center justify-center rounded-2xl bg-tcds-black px-5 font-display font-black text-white">
+                  Set up this device
+                </Link>
+              </div>
+            </div>
+          </ScreenCard>
+        )}
+
         <ScreenCard>
           <form className="space-y-4" onSubmit={submitPassword} noValidate>
             <div>
@@ -91,7 +103,6 @@ export function Login() {
                 name="username"
                 value={identifier}
                 onChange={(event) => { setIdentifier(event.target.value); clearError(); }}
-                onBlur={() => void checkPasskeyAvailability(identifier)}
                 className="tcds-focus min-h-14 w-full rounded-2xl border border-tcds-line bg-tcds-surface px-4 py-4 text-[16px] font-semibold text-tcds-ink placeholder:text-tcds-muted/50 focus:border-tcds-gold"
                 placeholder="EMP-0001"
                 autoCapitalize="none"
@@ -118,7 +129,7 @@ export function Login() {
                   placeholder="Enter password"
                   autoComplete="current-password"
                   enterKeyHint="go"
-                  disabled={busy || !passwordAllowed}
+                  disabled={busy}
                   required
                 />
                 <button
@@ -133,12 +144,12 @@ export function Login() {
               </div>
             </div>
 
-            <PrimaryButton type="submit" loading={state === 'authenticating'} disabled={!isOnline || !passwordAllowed || !identifier.trim() || !password || state === 'unavailable'}>
-              {state === 'authenticating' ? 'Signing You In…' : 'Sign In Securely'}
+            <PrimaryButton type="submit" loading={signingIn} disabled={!isOnline || !deviceReady || !identifier.trim() || !password || state === 'unavailable'}>
+              {state === 'device-proof' ? 'Verifying Device…' : state === 'authenticating' ? 'Signing You In…' : 'Sign In Securely'}
             </PrimaryButton>
 
-            {state === 'authenticating' && (
-              <button type="button" onClick={cancelAuthentication} className="tcds-focus flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-black text-tcds-muted">
+            {signingIn && (
+              <button type="button" onClick={cancel} className="tcds-focus flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-black text-tcds-muted">
                 <XCircle size={17} /> Cancel sign-in
               </button>
             )}
@@ -161,9 +172,7 @@ export function Login() {
           )}
 
           <p className="mt-4 text-center text-xs font-semibold text-tcds-muted">
-            {showPasskeyButton
-              ? 'A passkey is available for this account on an approved device.'
-              : 'First-time employees sign in with a password, then enroll Face ID or a passkey from their authenticated account.'}
+            First-time employees sign in with a password, then enroll Face ID or a passkey from their account.
           </p>
         </ScreenCard>
 
@@ -183,8 +192,8 @@ export function Login() {
         <footer className="space-y-1 text-center text-xs font-semibold text-tcds-muted">
           <p className="flex items-center justify-center gap-1"><ShieldCheck size={14} className="text-tcds-gold" /> Secure session · HttpOnly cookie · No browser token storage</p>
           <p>Version {bootstrap?.releaseVersion ?? brand.version} · {bootstrap?.environment ?? import.meta.env.VITE_APP_ENV ?? 'UNKNOWN'}</p>
-          <p className="break-all">Device {bootstrap?.device.deviceId ?? localStorage.getItem('tcds.device.installationId') ?? 'unregistered'}</p>
-          <p>{bootstrap?.device.facilityCode ?? 'Facility unassigned'} · {bootstrap?.device.stationCode ?? 'Station unassigned'}</p>
+          <p className="break-all">Device {profile?.deviceId ?? 'not set up'}</p>
+          {profile && <p><Link to="/device-setup" className="underline">Device setup</Link></p>}
         </footer>
       </div>
     </div>

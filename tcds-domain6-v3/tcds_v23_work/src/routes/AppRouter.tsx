@@ -14,6 +14,8 @@ import { PhotosScreen } from '../features/photos/PhotosScreen';
 import { VerificationScreen } from '../features/verification/VerificationScreen';
 import { StorageAssignmentScreen } from '../features/storage/StorageAssignmentScreen';
 import { ProtectedRoute } from '../features/auth/routes/ProtectedRoute';
+import { DeviceSetupPage } from '../features/auth/pages/DeviceSetupPage';
+import { RestrictedSession } from '../screens/RestrictedSession';
 
 // The diagnostic surface is the only consumer of the Scandit runtime. Loading it
 // on demand keeps the scanner SDK out of the initial application bundle.
@@ -32,6 +34,10 @@ const lazyScreen = (element: JSX.Element) => (
 export const router = createBrowserRouter([
   { path: '/', element: <AppLayout />, children: [
     { index: true, element: <Login /> },
+    // TCDS Login V2: public device setup (key created on the phone, registered by an administrator).
+    { path: 'device-setup', element: <DeviceSetupPage /> },
+    // Restricted sessions (password must be changed) land here instead of looping to a blank page.
+    { path: 'auth/restricted', element: <RestrictedSession /> },
     { path: 'dashboard', element: protect(<Dashboard />) },
     { path: 'receive', element: protect(<ReceiveScreen />) },
     { path: 'photos', element: protect(<PhotosScreen />) },
