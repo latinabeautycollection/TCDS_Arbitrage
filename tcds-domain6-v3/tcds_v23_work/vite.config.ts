@@ -13,9 +13,9 @@ export default defineConfig({
     VitePWA({
       // src/main.tsx already registers /sw.js itself. Do not inject a second registration.
       injectRegister: null,
-      // The new worker waits and activates on the next controlled reload, so a
-      // warehouse operator is never interrupted by a forced refresh.
-      registerType: 'prompt',
+      // TCDS: a new worker activates at once (nothing ever prompted, so updates waited until every tab closed).
+      // It caches only the Scandit runtime, so this never reloads the page; src/components/AppUpdate handles app releases.
+      registerType: 'autoUpdate',
       // The existing public/manifest.webmanifest remains authoritative.
       manifest: false,
       workbox: {

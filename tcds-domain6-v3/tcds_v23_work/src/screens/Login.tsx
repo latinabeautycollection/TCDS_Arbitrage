@@ -1,5 +1,5 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
-import { Eye, EyeOff, KeyRound, LockKeyhole, RefreshCw, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { Eye, EyeOff, KeyRound, LockKeyhole, RefreshCw, ScanFace, ShieldCheck, Smartphone, XCircle } from 'lucide-react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { BrandMark } from '../components/BrandMark';
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -9,16 +9,23 @@ import { AuthReadinessCard } from '../features/auth/components/AuthReadinessCard
 import { LoginErrorBanner } from '../features/auth/components/LoginErrorBanner';
 import { useAuth } from '../features/auth/context/AuthContext';
 
+// Face ID offer: remembered per user on this device ('on' = enrolled here, 'skip' = declined).
+const faceIdKey = (userId: string) => `tcds.faceid.${userId}`;
+const faceIdChoice = (userId: string) => { try { return localStorage.getItem(faceIdKey(userId)); } catch { return null; } };
+const rememberFaceId = (userId: string, choice: 'on' | 'skip') => { try { localStorage.setItem(faceIdKey(userId), choice); } catch { /* private mode */ } };
+
 // Login V2 sign-in screen: the app's original design, driven by the 6.1D auth context.
 export function Login() {
   const identifierId = useId();
   const passwordId = useId();
   const navigate = useNavigate();
   const location = useLocation();
-  const { state, session, bootstrap, error, isOnline, login, loginWithPasskey, cancel, retryBootstrap, clearError } = useAuth();
+  const { state, session, bootstrap, error, isOnline, login, loginWithPasskey, enrollPasskey, cancel, retryBootstrap, clearError } = useAuth();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [enrolling, setEnrolling] = useState(false);
+  const passwordSignIn = useRef(false);
 
   const redirectTo = (location.state as { from?: string } | null)?.from ?? '/dashboard';
   const signingIn = state === 'authenticating' || state === 'device-proof';
@@ -26,10 +33,12 @@ export function Login() {
   const deviceReady = bootstrap?.deviceEnrolled === true;
   const showPasskeyButton = Boolean(deviceReady && bootstrap?.webAuthnSupported && bootstrap?.platformAuthenticatorAvailable && isOnline);
   const profile = bootstrap?.deviceProfile ?? null;
+  const faceIdUser = session?.context?.userId || identifier.trim().toLowerCase();
 
-  useEffect(() => {
-    if (session?.authenticated) navigate(redirectTo, { replace: true });
-  }, [session?.authenticated, navigate, redirectTo]);
+  // Straight after a password sign-in on this screen, offer Face ID once on a phone that supports it. Decided during render:
+  // the redirect below runs in the same render that sees the new session, so an effect would be too late.
+  const offerFaceId = Boolean(session?.authenticated && passwordSignIn.current && !session.context?.restrictedSession
+    && bootstrap?.webAuthnSupported && bootstrap?.platformAuthenticatorAvailable && isOnline && !faceIdChoice(faceIdUser));
 
   // The device check runs when the app starts; re-check on arrival (e.g. straight after Device setup).
   useEffect(() => {
@@ -37,18 +46,66 @@ export function Login() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  async function turnOnFaceId() {
+    clearError();
+    setEnrolling(true);
+    try {
+      await enrollPasskey(`${brand.product} on this device`);
+      rememberFaceId(faceIdUser, 'on');
+      navigate(redirectTo, { replace: true });
+    } catch { /* rendered by context; the user can retry or skip */ }
+    finally { setEnrolling(false); }
+  }
+
+  function skipFaceId() {
+    clearError();
+    rememberFaceId(faceIdUser, 'skip');
+    navigate(redirectTo, { replace: true });
+  }
+
+  if (session?.authenticated && offerFaceId) {
+    return (
+      <div className="safe-top safe-bottom flex min-h-[100dvh] items-center justify-center px-4 py-8">
+        <div className="w-full max-w-md space-y-5">
+          <header className="text-center">
+            <BrandMark />
+            <h1 className="mt-5 font-display text-3xl font-black tracking-tight text-tcds-ink">Turn on Face ID?</h1>
+            <p className="mt-2 text-sm font-semibold text-tcds-muted">Sign in next time with a glance instead of typing your password.</p>
+          </header>
+          {error && <LoginErrorBanner error={error} onDismiss={clearError} />}
+          <ScreenCard>
+            <div className="flex items-start gap-3 text-sm font-semibold text-tcds-muted">
+              <ScanFace className="mt-1 shrink-0 text-tcds-gold" size={22} />
+              <p>Face ID stays on this phone. Your face is never sent to TCDS. You can still sign in with your password at any time.</p>
+            </div>
+            <div className="mt-5 space-y-2">
+              <PrimaryButton type="button" onClick={() => void turnOnFaceId()} loading={enrolling} disabled={enrolling || !isOnline}>
+                {enrolling ? 'Setting Up Face ID…' : 'Turn On Face ID'}
+              </PrimaryButton>
+              <button type="button" onClick={skipFaceId} disabled={enrolling} className="tcds-focus flex min-h-12 w-full items-center justify-center rounded-xl text-sm font-black text-tcds-muted disabled:opacity-50">
+                Not now
+              </button>
+            </div>
+          </ScreenCard>
+        </div>
+      </div>
+    );
+  }
+
   if (session?.authenticated) return <Navigate to={redirectTo} replace />;
 
   async function submitPassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearError();
     if (!identifier.trim() || !password) return;
-    try { await login(identifier.trim(), password); } catch { /* rendered by context */ }
+    passwordSignIn.current = true;
+    try { await login(identifier.trim(), password); } catch { passwordSignIn.current = false; /* rendered by context */ }
   }
 
   async function submitPasskey() {
     clearError();
     if (!identifier.trim()) return;
+    passwordSignIn.current = false;
     try { await loginWithPasskey(identifier.trim()); } catch { /* rendered by context */ }
   }
 
