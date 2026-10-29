@@ -17,8 +17,3 @@ export function ProtectedRoute({ children, permission }: { children: ReactNode; 
 
   return <>{children}</>;
 }
-
-/** Compatibility export required by the existing Scandit diagnostics route. Production is always fail-closed. */
-export function isPreviewAccessEnabled(): boolean {
-  return Boolean(import.meta.env.DEV && import.meta.env.VITE_ENABLE_AUTH_PREVIEW === 'true');
-}

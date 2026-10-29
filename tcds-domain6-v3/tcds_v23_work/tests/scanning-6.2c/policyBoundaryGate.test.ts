@@ -147,6 +147,9 @@ function runBoundaryCheck(
     ...process.env,
   } as Record<string, string>;
 
+  // The fixture repository is always judged up to its own HEAD.
+  delete env.DOMAIN6_2C_HEAD_SHA;
+
   if (baseline === undefined) {
     delete env.DOMAIN6_2C_BASELINE_SHA;
   } else {

@@ -30,10 +30,14 @@ jobs:
       # baselines are required. The 6.2B baseline is the approved production
       # baseline for the capture slice; a repository variable of the same name
       # overrides it without editing this workflow. The 6.2C baseline is the
-      # commit immediately before the 6.2C policy overlay, which on a pull
-      # request is the base commit of that pull request.
+      # commit immediately before the 6.2C policy overlay.
+      # 6.2C is merged (PR #8, 53fe0a5), so its boundary is re-verified on its
+      # own range (175cadf...53fe0a5) instead of judging every later pull request
+      # against the 6.2C allowlist. Tests and the build still run on the PR head.
+      # Repository variables of the same names override both ends.
       DOMAIN6_2B_BASELINE_SHA: ${{ inputs.domain6_2b_baseline_sha || vars.DOMAIN6_2B_BASELINE_SHA || '675b89bbf859f71e3507731f6bfd8c8b727c180d' }}
-      DOMAIN6_2C_BASELINE_SHA: ${{ inputs.domain6_2c_baseline_sha || github.event.pull_request.base.sha }}
+      DOMAIN6_2C_BASELINE_SHA: ${{ inputs.domain6_2c_baseline_sha || vars.DOMAIN6_2C_BASELINE_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
+      DOMAIN6_2C_HEAD_SHA: ${{ vars.DOMAIN6_2C_HEAD_SHA || '53fe0a5caf611bf8dd8c506d60e3a66874d505c1' }}
 
     steps:
       - uses: actions/checkout@v4

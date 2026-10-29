@@ -63,15 +63,40 @@ if (
   process.exit(1);
 }
 
+// The boundary judges what the 6.2C slice changed. On a later branch, set
+// DOMAIN6_2C_HEAD_SHA to the slice's merge commit so later work (other slices,
+// Login V2) is not judged against the 6.2C allowlist. Defaults to HEAD.
+const head =
+  process.env
+    .DOMAIN6_2C_HEAD_SHA
+    ?.trim() || "HEAD";
+
+if (
+  head !== "HEAD" &&
+  !/^[0-9a-fA-F]{40}$/.test(
+    head,
+  )
+) {
+  console.error(
+    "Domain 6.2C boundary verification FAILED: DOMAIN6_2C_HEAD_SHA must be a full 40-character SHA.",
+  );
+  process.exit(1);
+}
+
 try {
   git([
     "cat-file",
     "-e",
     `${baseline}^{commit}`,
   ]);
+  git([
+    "cat-file",
+    "-e",
+    `${head}^{commit}`,
+  ]);
 } catch {
   console.error(
-    "Domain 6.2C boundary verification FAILED: baseline commit is not available.",
+    "Domain 6.2C boundary verification FAILED: baseline or head commit is not available.",
   );
   process.exit(1);
 }
@@ -84,7 +109,7 @@ try {
       "diff",
       "--name-only",
       "--diff-filter=ACMRT",
-      `${baseline}...HEAD`,
+      `${baseline}...${head}`,
     ])
       .split(/\r?\n/)
       .map((value) =>

@@ -121,31 +121,10 @@ describe("6.2B diagnostic entry point", () => {
     ).not.toHaveBeenCalled();
   });
 
-  it("follows the temporary preview access rule when nobody is signed in", () => {
+  it("offers nothing at all when nobody is signed in, even with the withdrawn preview flags set", () => {
     authMock.authenticated = false;
     vi.stubEnv("VITE_PREVIEW_UNLOCK", "true");
-
-    renderEntry();
-
-    const target = screen.getByTestId(
-      "scanner-diagnostics-entry",
-    );
-
-    fireEvent.pointerDown(target);
-    vi.advanceTimersByTime(
-      SCANNER_DIAGNOSTICS_HOLD_MS,
-    );
-
-    expect(
-      routerMock.navigate,
-    ).toHaveBeenCalledWith(
-      SCANNER_DIAGNOSTICS_ROUTE,
-    );
-  });
-
-  it("offers nothing at all when nobody is signed in and preview access is off", () => {
-    authMock.authenticated = false;
-    vi.stubEnv("VITE_PREVIEW_UNLOCK", "false");
+    vi.stubEnv("VITE_ENABLE_AUTH_PREVIEW", "true");
 
     const { container } = renderEntry();
 
