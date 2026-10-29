@@ -43,7 +43,6 @@ export function Login() {
   // The device check runs when the app starts; re-check on arrival (e.g. straight after Device setup).
   useEffect(() => {
     if (bootstrap && !bootstrap.deviceEnrolled) void retryBootstrap();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function turnOnFaceId() {

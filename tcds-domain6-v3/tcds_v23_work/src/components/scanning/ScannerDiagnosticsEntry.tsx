@@ -7,7 +7,6 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../features/auth/context/AuthContext";
-import { isPreviewAccessEnabled } from "../../features/auth/routes/ProtectedRoute";
 
 /** Press and hold before the scanner diagnostic surface opens. */
 export const SCANNER_DIAGNOSTICS_HOLD_MS = 1200;
@@ -22,11 +21,9 @@ export const SCANNER_DIAGNOSTICS_ROUTE =
  * address bar, so certification testing needs a way in that ordinary operators
  * do not meet. A deliberate press and hold opens it.
  *
- * It follows exactly the same access rule as the route guard, and reads that rule
- * from the guard itself: a signed-in session, or the temporary preview access the
- * application already allows while the authentication shell is being built. This
- * adds no access path of its own, so when the temporary rule is withdrawn the
- * gesture closes with it and the route keeps its guard either way.
+ * It follows exactly the same access rule as the route guard: a signed-in session.
+ * Login V2 withdrew the temporary preview access, so the gesture closed with it.
+ * This adds no access path of its own, and the route keeps its guard either way.
  */
 export function ScannerDiagnosticsEntry({
   children,
@@ -35,8 +32,7 @@ export function ScannerDiagnosticsEntry({
   const { session } = useAuth();
 
   const authenticated =
-    Boolean(session?.authenticated) ||
-    isPreviewAccessEnabled();
+    Boolean(session?.authenticated);
 
   const holdTimer = useRef<
     ReturnType<typeof setTimeout> | null
