@@ -204,6 +204,12 @@ export function Login() {
               {state === 'device-proof' ? 'Verifying Device…' : state === 'authenticating' ? 'Signing You In…' : 'Sign In Securely'}
             </PrimaryButton>
 
+            <div className="text-right">
+              <Link to="/auth/recovery" className="tcds-focus inline-flex min-h-11 items-center rounded-xl text-sm font-black text-tcds-gold underline underline-offset-4">
+                Forgot password?
+              </Link>
+            </div>
+
             {signingIn && (
               <button type="button" onClick={cancel} className="tcds-focus flex min-h-11 w-full items-center justify-center gap-2 rounded-xl text-sm font-black text-tcds-muted">
                 <XCircle size={17} /> Cancel sign-in
