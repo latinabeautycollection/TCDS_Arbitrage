@@ -135,7 +135,21 @@ function commit(
 function runBoundaryCheck(
   app: string,
   baseline: string,
+  head?: string,
 ): { code: number; output: string } {
+  const env = {
+    ...process.env,
+    DOMAIN6_2B_BASELINE_SHA:
+      baseline,
+  } as Record<string, string>;
+
+  // Unless a test pins it, the fixture repository is judged up to its own HEAD.
+  if (head === undefined) {
+    delete env.DOMAIN6_2B_HEAD_SHA;
+  } else {
+    env.DOMAIN6_2B_HEAD_SHA = head;
+  }
+
   try {
     const stdout = execFileSync(
       process.execPath,
@@ -143,11 +157,7 @@ function runBoundaryCheck(
       {
         cwd: app,
         encoding: "utf8",
-        env: {
-          ...process.env,
-          DOMAIN6_2B_BASELINE_SHA:
-            baseline,
-        },
+        env,
       },
     );
 
@@ -220,6 +230,64 @@ describe("6.2B protected warehouse-feature boundary", () => {
     expect(result.code).toBe(1);
     expect(result.output).toMatch(
       /may not modify a Domain 6 business feature/,
+    );
+  });
+
+  it("judges only the pinned 6.2B range when a head SHA is set", () => {
+    const { app, baseline } =
+      createRepository();
+
+    commit(
+      app,
+      "src/lib/scanning/capture/capturePolicy.ts",
+      "export const captureRevision = 2;\n",
+    );
+
+    const sliceHead = git(app, [
+      "rev-parse",
+      "HEAD",
+    ]);
+
+    // Later screen wiring touches a protected feature after the slice merged.
+    commit(
+      app,
+      "src/features/receiving/ReceivingWorkflow.ts",
+      "export const receivingRevision = 2;\n",
+    );
+
+    const pinned =
+      runBoundaryCheck(
+        app,
+        baseline,
+        sliceHead,
+      );
+
+    expect(pinned.code).toBe(0);
+    expect(pinned.output).toMatch(
+      /boundary verification PASSED/,
+    );
+  });
+
+  it("fails closed when the head SHA is not a full SHA", () => {
+    const { app, baseline } =
+      createRepository();
+
+    commit(
+      app,
+      "src/lib/scanning/capture/capturePolicy.ts",
+      "export const captureRevision = 2;\n",
+    );
+
+    const result =
+      runBoundaryCheck(
+        app,
+        baseline,
+        "main",
+      );
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(
+      /DOMAIN6_2B_HEAD_SHA must be a full 40-character Git SHA/,
     );
   });
 });

@@ -137,6 +137,36 @@ function requireBaseline() {
   return baseline;
 }
 
+// The boundary judges what the 6.2B slice changed. On a later branch, set
+// DOMAIN6_2B_HEAD_SHA to the slice's last merge commit so later work (6.2D
+// screen wiring) is not judged against the 6.2B ownership rules. Defaults to
+// HEAD.
+function requireHead() {
+  const head =
+    process.env
+      .DOMAIN6_2B_HEAD_SHA
+      ?.trim() || "HEAD";
+
+  if (
+    head !== "HEAD" &&
+    !/^[0-9a-fA-F]{40}$/.test(
+      head,
+    )
+  ) {
+    throw new Error(
+      "DOMAIN6_2B_HEAD_SHA must be a full 40-character Git SHA.",
+    );
+  }
+
+  git([
+    "cat-file",
+    "-e",
+    `${head}^{commit}`,
+  ]);
+
+  return head;
+}
+
 const violations = [];
 
 for (
@@ -202,10 +232,13 @@ for (
 }
 
 let baseline;
+let head;
 
 try {
   baseline =
     requireBaseline();
+  head =
+    requireHead();
 } catch (error) {
   console.error(
     "Domain 6.2B boundary verification FAILED",
@@ -224,7 +257,7 @@ try {
       "diff",
       "--name-only",
       "--diff-filter=ACMRT",
-      `${baseline}...HEAD`,
+      `${baseline}...${head}`,
     ])
       .split(/\r?\n/)
       .map((value) =>

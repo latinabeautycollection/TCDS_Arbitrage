@@ -35,7 +35,10 @@ jobs:
       # own range (175cadf...53fe0a5) instead of judging every later pull request
       # against the 6.2C allowlist. Tests and the build still run on the PR head.
       # Repository variables of the same names override both ends.
+      # The 6.2B boundary inside the chain is pinned the same way, to its own
+      # merged range (675b89b...175cadf).
       DOMAIN6_2B_BASELINE_SHA: ${{ inputs.domain6_2b_baseline_sha || vars.DOMAIN6_2B_BASELINE_SHA || '675b89bbf859f71e3507731f6bfd8c8b727c180d' }}
+      DOMAIN6_2B_HEAD_SHA: ${{ vars.DOMAIN6_2B_HEAD_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
       DOMAIN6_2C_BASELINE_SHA: ${{ inputs.domain6_2c_baseline_sha || vars.DOMAIN6_2C_BASELINE_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
       DOMAIN6_2C_HEAD_SHA: ${{ vars.DOMAIN6_2C_HEAD_SHA || '53fe0a5caf611bf8dd8c506d60e3a66874d505c1' }}
 
