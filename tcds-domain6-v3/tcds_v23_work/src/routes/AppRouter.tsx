@@ -16,6 +16,7 @@ import { StorageAssignmentScreen } from '../features/storage/StorageAssignmentSc
 import { ProtectedRoute } from '../features/auth/routes/ProtectedRoute';
 import { DeviceSetupPage } from '../features/auth/pages/DeviceSetupPage';
 import { RestrictedSession } from '../screens/RestrictedSession';
+import {EmployeeRecoveryPage,NewPasswordRecoveryPage,ManagerRecoveryPage,AdminRecoveryPage} from '../features/auth/recovery/RecoveryUI';
 
 // The diagnostic surface is the only consumer of the Scandit runtime. Loading it
 // on demand keeps the scanner SDK out of the initial application bundle.
@@ -36,6 +37,11 @@ export const router = createBrowserRouter([
     { index: true, element: <Login /> },
     // TCDS Login V2: public device setup (key created on the phone, registered by an administrator).
     { path: 'device-setup', element: <DeviceSetupPage /> },
+    // Domain 6.1: approved additive recovery navigation
+    { path: 'auth/recovery', element: <EmployeeRecoveryPage /> },
+    { path: 'auth/recovery/new-password', element: <NewPasswordRecoveryPage /> },
+    { path: 'auth/recovery/manager', element: <ProtectedRoute permission='warehouse:identity:password:override_24h'><ManagerRecoveryPage /></ProtectedRoute> },
+    { path: 'auth/recovery/admin', element: <ProtectedRoute permission='warehouse:identity:password:reset_approve'><AdminRecoveryPage /></ProtectedRoute> },
     // Restricted sessions (password must be changed) land here instead of looping to a blank page.
     { path: 'auth/restricted', element: <RestrictedSession /> },
     { path: 'dashboard', element: protect(<Dashboard />) },
