@@ -12,6 +12,10 @@ import type {
   ProductionWorkflowAdapter,
   WorkflowAdapterContext,
 } from "../adapters/ProductionWorkflowAdapter";
+import {
+  classifyWorkflowFailure,
+  decisionForFailure,
+} from "../adapters/workflowFailure";
 
 export interface ScannerControl {
   pause(): Promise<void>;
@@ -75,6 +79,9 @@ export class WorkflowScanCoordinator {
     // Operation is created ONCE and retained through timeout/reconciliation retry.
     this.operation ??= createWarehouseClientOperation();
 
+    const expectedRowVersion =
+      ctx.adapterContext.rowVersion ?? ctx.adapterContext.pickTask?.rowVersion;
+
     const envelope: WarehouseScanEnvelope = {
       observation,
       captureIntent: ctx.captureIntent,
@@ -85,9 +92,7 @@ export class WorkflowScanCoordinator {
       workflowStep: ctx.workflowStep,
       captureSource: ctx.captureSource,
       workflowContractVersion: "6.2D.2",
-      ...(ctx.adapterContext.rowVersion !== undefined
-        ? { expectedRowVersion: ctx.adapterContext.rowVersion }
-        : {}),
+      ...(expectedRowVersion !== undefined ? { expectedRowVersion } : {}),
     };
 
     try {
@@ -95,15 +100,11 @@ export class WorkflowScanCoordinator {
       if (decision.outcome !== "RECONCILING") this.operation = null;
       return decision;
     } catch (error) {
-      if (isUncertainTransportFailure(error)) {
-        return {
-          outcome: "RECONCILING",
-          reasonCode: "RECONCILIATION_REQUIRED",
-          nextAction: "RECONCILE",
-        };
-      }
-      this.operation = null;
-      throw error;
+      // One failure shape at the boundary. Only an uncertain transport outcome keeps the
+      // operation, so a retry carries the same identity; every other failure ends it.
+      const failure = classifyWorkflowFailure(error);
+      if (failure.kind !== "UNCERTAIN") this.operation = null;
+      return decisionForFailure(failure);
     }
   }
 
@@ -118,14 +119,4 @@ export class WorkflowScanCoordinator {
   clearOperation(): void {
     this.operation = null;
   }
-}
-
-function isUncertainTransportFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return [
-    "REQUEST_TIMEOUT",
-    "NETWORK_ERROR",
-    "NETWORK_UNAVAILABLE",
-    "RETURN_API_UNAVAILABLE",
-  ].includes(error.message);
 }

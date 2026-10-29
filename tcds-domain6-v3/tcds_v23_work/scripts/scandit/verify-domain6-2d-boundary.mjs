@@ -104,6 +104,15 @@ if (fs.existsSync(workflowDir)) {
     }
   }
 
+  // One HTTP path. Scans reach the warehouse only through the existing authoritative
+  // API helpers, so the workflow layer may neither issue a request nor name a route.
+  if (/\bfetch\s*\(/.test(text)) {
+    violations.push("6.2D workflow issues its own HTTP request; scans must go through the existing API helpers");
+  }
+  if (text.includes("/api/v1/")) {
+    violations.push("6.2D workflow names an API route; scans must go through the existing API helpers");
+  }
+
   if (/class\s+(ReceivingRepository|PutawayRepository|PickingRepository|PackingRepository|InventoryRepository|ReturnsRepository|OutboundRepository)\b/.test(text)) {
     violations.push("6.2D reintroduced duplicate warehouse business repositories");
   }

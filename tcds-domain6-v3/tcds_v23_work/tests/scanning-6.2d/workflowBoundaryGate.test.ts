@@ -214,6 +214,26 @@ describe("6.2D slice ownership", () => {
     expect(result.output).toMatch(/DOMAIN6_2D_HEAD_SHA must be a full 40-character SHA/);
   });
 
+  it("fails when the workflow layer issues its own HTTP request", () => {
+    const { app, baseline } = createRepository();
+    commit(app, "src/lib/scanning/workflow/adapters/productionApiPorts.ts", 'export const call = () => fetch("/x");\n');
+
+    const result = runGate(app, baseline);
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/issues its own HTTP request/);
+  });
+
+  it("fails when the workflow layer names an API route", () => {
+    const { app, baseline } = createRepository();
+    commit(app, "src/lib/scanning/workflow/adapters/productionApiPorts.ts", 'export const route = "/api/v1/picks";\n');
+
+    const result = runGate(app, baseline);
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/names an API route/);
+  });
+
   it("fails closed when the baseline SHA is absent", () => {
     const { app } = createRepository();
     commit(app, OWNED, "export const revision = 2;\n");
