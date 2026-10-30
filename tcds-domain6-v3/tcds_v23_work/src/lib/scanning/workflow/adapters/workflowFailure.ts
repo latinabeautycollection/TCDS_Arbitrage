@@ -30,7 +30,14 @@ const UNCERTAIN_CODES = new Set([
   "RETURN_API_UNAVAILABLE",
 ]);
 
-const UNCERTAIN_STATUS = new Set([0, 408, 502, 503, 504]);
+// Status 0 is a request that never got an answer, 408 a timeout. Every 5xx is uncertain
+// too: the server failed while handling the request, possibly after it had committed, so
+// the retry must carry the same identity.
+const UNCERTAIN_STATUS = new Set([0, 408]);
+
+// Picking, receiving and Pack/Ship report a server failure only as text, such as
+// HTTP_500 or PICK_API_503, without a numeric status.
+const SERVER_FAILURE_CODE = /^(?:HTTP|PICK_API)_5\d\d$/;
 
 // The Fetch API rejects with a TypeError when the network cannot be reached. Any other
 // TypeError is a defect, and must not be retried as though it were a lost response.
@@ -70,7 +77,14 @@ export function classifyWorkflowFailure(error: unknown): WorkflowFailure {
       ? { supportReference: rawReference }
       : {};
 
-  if (UNCERTAIN_CODES.has(code) || (status !== undefined && UNCERTAIN_STATUS.has(status))) {
+  const serverFailure =
+    (status !== undefined && status >= 500 && status <= 599) || SERVER_FAILURE_CODE.test(code);
+
+  if (
+    UNCERTAIN_CODES.has(code) ||
+    serverFailure ||
+    (status !== undefined && UNCERTAIN_STATUS.has(status))
+  ) {
     return { kind: "UNCERTAIN", code, ...reference };
   }
   if (code === "SESSION_EXPIRED" || status === 401) {

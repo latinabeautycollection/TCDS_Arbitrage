@@ -37,7 +37,7 @@ function git(cwd: string, args: string[]): string {
   }).trim();
 }
 
-function createRepository(): { app: string; baseline: string } {
+function createRepository(extraBaseline: Record<string, string> = {}): { app: string; baseline: string } {
   const repository = fs.mkdtempSync(path.join(os.tmpdir(), "domain6-2d-boundary-"));
   workspaces.push(repository);
 
@@ -47,7 +47,7 @@ function createRepository(): { app: string; baseline: string } {
   git(repository, ["config", "user.email", "certification@example.invalid"]);
   git(repository, ["config", "user.name", "Domain 6.2D certification"]);
 
-  for (const [relativeFile, contents] of Object.entries(baselineFiles)) {
+  for (const [relativeFile, contents] of Object.entries({ ...baselineFiles, ...extraBaseline })) {
     const full = path.join(app, relativeFile);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, contents);
@@ -137,6 +137,28 @@ describe("6.2D database-coupling rules", () => {
 
     expect(result.code).toBe(1);
     expect(result.output).toMatch(/query through a database client|inline SQL/);
+  });
+});
+
+describe("6.2D inline SQL rule", () => {
+  it("does not flag ordinary interface text", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx": 'export const hint = "Select a bin from the list";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    expect(runGate(app, baseline).code).toBe(0);
+  });
+
+  it("still flags real SQL in a feature", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/binQuery.ts": 'export const sql = "SELECT bin_id FROM warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
   });
 });
 

@@ -257,6 +257,10 @@ describe("6.2D one failure shape for six helpers", () => {
     ["inventory 401", Object.assign(new Error("Sign in"), { status: 401 }), "SESSION_EXPIRED"],
     ["business rejection", new Error("WRONG_ITEM"), "REJECTED"],
     ["client defect", new TypeError("x is undefined"), "REJECTED"],
+    ["server failure with a status", Object.assign(new Error("Server error"), { status: 500 }), "UNCERTAIN"],
+    ["server failure reported as text", new Error("HTTP_500"), "UNCERTAIN"],
+    ["picking server failure as text", new Error("PICK_API_503"), "UNCERTAIN"],
+    ["client error as text stays a rejection", new Error("HTTP_404"), "REJECTED"],
   ])("%s", (_label, error, kind) => {
     expect(classifyWorkflowFailure(error).kind).toBe(kind);
   });
@@ -289,7 +293,7 @@ describe("6.2D coordinator keeps the operation only while the outcome is uncerta
     const ctx = context("PUTAWAY", "ITEM_ID", { rowVersion: 3 });
 
     expect((await coordinator.onObservation(observation("SKU-1"), ctx)).outcome).toBe("RECONCILING");
-    expect((await coordinator.retry(observation("SKU-1"), ctx)).outcome).toBe("ACCEPTED");
+    expect((await coordinator.retry(ctx)).outcome).toBe("ACCEPTED");
     expect(seen[0]).toBe(seen[1]);
   });
 
@@ -325,5 +329,143 @@ describe("6.2D coordinator keeps the operation only while the outcome is uncerta
     await expect(
       coordinator.onObservation(observation("SKU-1"), context("PICKING", "ITEM_ID", { pickTask: task })),
     ).resolves.toMatchObject({ outcome: "CONFLICT", nextAction: "REFRESH_WORKFLOW" });
+  });
+});
+
+describe("6.2D a pending operation belongs to one scan", () => {
+  const scanner = () => ({ pause: vi.fn(async () => {}), resume: vi.fn(async () => {}), start: vi.fn(async () => {}) });
+  const policy = { resolveIntentPolicy: vi.fn() };
+  const pickContext = (): WorkflowScanCoordinatorContext => ({
+    workflow: "PICKING",
+    workflowEntityId: "T1",
+    workflowStep: "SCAN_ITEM",
+    captureIntent: intent("ITEM_ID"),
+    captureSource: "SCANDIT_WEB",
+    adapterContext: { pickTask: task },
+  });
+
+  it("retries a real network drop with the same identity", async () => {
+    const ports = fakePorts();
+    const seen: string[] = [];
+    vi.mocked(ports.picking.scanItem)
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); throw new TypeError("Failed to fetch"); })
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); return { accepted: true, code: "OK", message: "", task }; });
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    expect((await coordinator.onObservation(observation("SKU-1"), pickContext())).outcome).toBe("RECONCILING");
+    expect((await coordinator.retry(pickContext())).outcome).toBe("ACCEPTED");
+    expect(seen[0]).toBe(seen[1]);
+  });
+
+  it("retries an HTTP 5xx with the same identity", async () => {
+    const ports = fakePorts();
+    const seen: string[] = [];
+    vi.mocked(ports.picking.scanItem)
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); throw new Error("PICK_API_500"); })
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); return { accepted: true, code: "OK", message: "", task }; });
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    expect((await coordinator.onObservation(observation("SKU-1"), pickContext())).outcome).toBe("RECONCILING");
+    await coordinator.retry(pickContext());
+    expect(seen[0]).toBe(seen[1]);
+  });
+
+  it("never sends a different barcode under the pending identity", async () => {
+    const ports = fakePorts();
+    vi.mocked(ports.picking.scanItem).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    await coordinator.onObservation(observation("SKU-1"), pickContext());
+    const other = await coordinator.onObservation(observation("SKU-2"), pickContext());
+
+    expect(other).toMatchObject({ outcome: "BLOCKED", reasonCode: "PENDING_SCAN_UNRESOLVED", nextAction: "RECONCILE" });
+    expect(ports.picking.scanItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the pending barcode, not the last one scanned, then starts fresh", async () => {
+    const ports = fakePorts();
+    const seen: Array<[string, string]> = [];
+    vi.mocked(ports.picking.scanItem).mockImplementation(async (_t, barcode, op) => {
+      seen.push([barcode, op.clientOperationId]);
+      if (seen.length === 1) throw new TypeError("Failed to fetch");
+      return { accepted: true, code: "OK", message: "", task };
+    });
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    await coordinator.onObservation(observation("SKU-1"), pickContext());
+    await coordinator.onObservation(observation("SKU-2"), pickContext());
+    await coordinator.retry(pickContext());
+    await coordinator.onObservation(observation("SKU-2"), pickContext());
+
+    expect(seen.map(([barcode]) => barcode)).toEqual(["SKU-1", "SKU-1", "SKU-2"]);
+    expect(seen[0][1]).toBe(seen[1][1]);
+    expect(seen[2][1]).not.toBe(seen[0][1]);
+  });
+
+  it("treats the same barcode scanned again as a true retry", async () => {
+    const ports = fakePorts();
+    const seen: string[] = [];
+    vi.mocked(ports.picking.scanItem)
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); throw new TypeError("Failed to fetch"); })
+      .mockImplementationOnce(async (_t, _b, op) => { seen.push(op.clientOperationId); return { accepted: true, code: "OK", message: "", task }; });
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    await coordinator.onObservation(observation("SKU-1"), pickContext());
+    await coordinator.onObservation({ ...observation("SKU-1"), observationId: "obs-rescan" }, pickContext());
+
+    expect(seen[0]).toBe(seen[1]);
+  });
+
+  it("resumes a receiving scan from its candidate without the screen passing it back", async () => {
+    const ports = fakePorts();
+    vi.mocked(ports.receiving.validateCandidate).mockRejectedValueOnce(new DOMException("aborted", "AbortError"));
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+    const ctx: WorkflowScanCoordinatorContext = {
+      workflow: "RECEIVING",
+      workflowEntityId: "RS1",
+      workflowStep: "RECEIVE_ITEM",
+      captureIntent: intent("ITEM_ID"),
+      captureSource: "SCANDIT_WEB",
+      adapterContext: { receivingSessionId: "RS1", intakeDraft: draftTemplate },
+    };
+
+    expect((await coordinator.onObservation(observation("UPC-1"), ctx)).outcome).toBe("RECONCILING");
+    expect((await coordinator.retry(ctx)).outcome).toBe("ACCEPTED");
+    expect(ports.receiving.createCandidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("has nothing to retry when no scan is pending", async () => {
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(fakePorts()), () => true);
+
+    expect(await coordinator.retry(pickContext())).toMatchObject({ outcome: "BLOCKED", reasonCode: "NOTHING_TO_RECONCILE" });
+  });
+
+  it.each([
+    ["CONFLICT", new Error("CONFLICT"), "CONFLICT", "REFRESH_WORKFLOW"],
+    ["STALE_VERSION", new Error("STALE_VERSION"), "STALE_STATE", "REFRESH_WORKFLOW"],
+    ["SESSION_EXPIRED", new Error("SESSION_EXPIRED"), "BLOCKED", "REAUTHENTICATE"],
+  ])("returns %s as an outcome instead of throwing", async (_label, error, outcome, nextAction) => {
+    const ports = fakePorts();
+    vi.mocked(ports.picking.scanItem).mockRejectedValueOnce(error);
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(ports), () => true);
+
+    await expect(coordinator.onObservation(observation("SKU-1"), pickContext())).resolves.toMatchObject({ outcome, nextAction });
+  });
+
+  it("returns a missing row version as an outcome instead of throwing", async () => {
+    const coordinator = new WorkflowScanCoordinator(scanner(), policy, new ProductionWorkflowAdapter(fakePorts()), () => true);
+    const ctx: WorkflowScanCoordinatorContext = {
+      workflow: "PUTAWAY",
+      workflowEntityId: "S1",
+      workflowStep: "SCAN_ITEM",
+      captureIntent: intent("ITEM_ID"),
+      captureSource: "SCANDIT_WEB",
+      adapterContext: {},
+    };
+
+    await expect(coordinator.onObservation(observation("SKU-1"), ctx)).resolves.toMatchObject({
+      outcome: "BLOCKED",
+      reasonCode: "ROW_VERSION_REQUIRED",
+    });
   });
 });

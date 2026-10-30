@@ -56,7 +56,9 @@ const databaseCoupling = [
     detail: "executes a query through a database client",
   },
   {
-    pattern: /\b(?:SELECT\s+[\s\S]{0,200}?\sFROM\s|INSERT\s+INTO\s|UPDATE\s+[A-Za-z_."]+\s+SET\s|DELETE\s+FROM\s)/i,
+    // SQL keywords in capitals followed by a real identifier. Interface text such as
+    // "Select a bin from the list" is mixed case and is not matched.
+    pattern: /\b(?:SELECT\s+[\w*.,\s"()]{1,200}?\s+FROM\s+[A-Za-z_][\w."]*|INSERT\s+INTO\s+[A-Za-z_][\w."]*|UPDATE\s+[A-Za-z_][\w."]*\s+SET\s|DELETE\s+FROM\s+[A-Za-z_][\w."]*)/,
     detail: "contains inline SQL",
   },
   {

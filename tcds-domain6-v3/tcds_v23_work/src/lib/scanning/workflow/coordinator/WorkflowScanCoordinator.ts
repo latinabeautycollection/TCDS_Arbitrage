@@ -32,8 +32,20 @@ export interface WorkflowScanCoordinatorContext {
   adapterContext: WorkflowAdapterContext;
 }
 
+/**
+ * A scan whose outcome is unknown. Its operation identity is reused only by a true retry
+ * of the same scan, never by a different barcode.
+ */
+interface PendingScan {
+  operation: WarehouseClientOperation;
+  observation: BarcodeDecodeObservation;
+  identity: string;
+  /** What a retry needs in order to resume rather than repeat, such as a created candidate. */
+  resume: Partial<WorkflowAdapterContext>;
+}
+
 export class WorkflowScanCoordinator {
-  private operation: WarehouseClientOperation | null = null;
+  private pending: PendingScan | null = null;
 
   constructor(
     private readonly scanner: ScannerControl,
@@ -54,19 +66,18 @@ export class WorkflowScanCoordinator {
     await this.scanner.start({ executionPolicy: policy });
   }
 
+  /** The scan whose outcome is still unknown, if there is one. */
+  get pendingObservation(): BarcodeDecodeObservation | null {
+    return this.pending?.observation ?? null;
+  }
+
   async onObservation(
     observation: BarcodeDecodeObservation,
     ctx: WorkflowScanCoordinatorContext,
   ): Promise<WorkflowScanDecision> {
     await this.scanner.pause();
 
-    if (!this.isOnline()) {
-      return {
-        outcome: "BLOCKED",
-        reasonCode: "OFFLINE_VALIDATION_UNAVAILABLE",
-        nextAction: "STOP_SCANNER",
-      };
-    }
+    if (!this.isOnline()) return offline();
 
     if (!ctx.captureIntent.allowedSymbologies.includes(observation.symbology)) {
       return {
@@ -76,17 +87,63 @@ export class WorkflowScanCoordinator {
       };
     }
 
-    // Operation is created ONCE and retained through timeout/reconciliation retry.
-    this.operation ??= createWarehouseClientOperation();
+    const identity = scanIdentity(observation, ctx);
+
+    if (this.pending && this.pending.identity !== identity) {
+      // A different barcode while an earlier scan's outcome is unknown. Sending it under
+      // the pending identity would give two payloads one idempotency key; sending it under
+      // a new one would abandon a scan the server may already have committed. The earlier
+      // scan is reconciled first.
+      return {
+        outcome: "BLOCKED",
+        reasonCode: "PENDING_SCAN_UNRESOLVED",
+        nextAction: "RECONCILE",
+        result: { pendingObservationId: this.pending.observation.observationId },
+      };
+    }
+
+    return this.submit(observation, ctx, identity);
+  }
+
+  /** Retries the scan whose outcome is unknown, under its original identity. */
+  async retry(ctx: WorkflowScanCoordinatorContext): Promise<WorkflowScanDecision> {
+    if (!this.pending) {
+      return {
+        outcome: "BLOCKED",
+        reasonCode: "NOTHING_TO_RECONCILE",
+        nextAction: "RESUME_SAME_PROFILE",
+      };
+    }
+    if (!this.isOnline()) return offline();
+
+    return this.submit(this.pending.observation, ctx, this.pending.identity);
+  }
+
+  /** Abandons the pending scan. Only for a screen that has reconciled it some other way. */
+  clearOperation(): void {
+    this.pending = null;
+  }
+
+  private async submit(
+    observation: BarcodeDecodeObservation,
+    ctx: WorkflowScanCoordinatorContext,
+    identity: string,
+  ): Promise<WorkflowScanDecision> {
+    // By construction a pending scan here has the same identity, so this is a true retry.
+    const operation = this.pending?.operation ?? createWarehouseClientOperation();
+    const adapterContext: WorkflowAdapterContext = {
+      ...ctx.adapterContext,
+      ...(this.pending?.resume ?? {}),
+    };
 
     const expectedRowVersion =
-      ctx.adapterContext.rowVersion ?? ctx.adapterContext.pickTask?.rowVersion;
+      adapterContext.rowVersion ?? adapterContext.pickTask?.rowVersion;
 
     const envelope: WarehouseScanEnvelope = {
       observation,
       captureIntent: ctx.captureIntent,
-      clientOperationId: this.operation.clientOperationId,
-      correlationId: this.operation.correlationId,
+      clientOperationId: operation.clientOperationId,
+      correlationId: operation.correlationId,
       workflow: ctx.workflow,
       workflowEntityId: ctx.workflowEntityId,
       workflowStep: ctx.workflowStep,
@@ -95,28 +152,52 @@ export class WorkflowScanCoordinator {
       ...(expectedRowVersion !== undefined ? { expectedRowVersion } : {}),
     };
 
+    let decision: WorkflowScanDecision;
     try {
-      const decision = await this.workflowAdapter.submit(envelope, ctx.adapterContext);
-      if (decision.outcome !== "RECONCILING") this.operation = null;
-      return decision;
+      decision = await this.workflowAdapter.submit(envelope, adapterContext);
     } catch (error) {
-      // One failure shape at the boundary. Only an uncertain transport outcome keeps the
-      // operation, so a retry carries the same identity; every other failure ends it.
-      const failure = classifyWorkflowFailure(error);
-      if (failure.kind !== "UNCERTAIN") this.operation = null;
-      return decisionForFailure(failure);
+      // One failure shape at the boundary: a helper's own error never leaves 6.2D.
+      decision = decisionForFailure(classifyWorkflowFailure(error));
     }
-  }
 
-  async retry(
-    observation: BarcodeDecodeObservation,
-    ctx: WorkflowScanCoordinatorContext,
-  ): Promise<WorkflowScanDecision> {
-    // Retains the same operation identity until the server gives a conclusive result.
-    return this.onObservation(observation, ctx);
-  }
+    // Only an unknown outcome keeps the operation; every conclusive result ends it.
+    this.pending =
+      decision.outcome === "RECONCILING"
+        ? { operation, observation, identity, resume: resumeFrom(decision) }
+        : null;
 
-  clearOperation(): void {
-    this.operation = null;
+    return decision;
   }
+}
+
+function offline(): WorkflowScanDecision {
+  return {
+    outcome: "BLOCKED",
+    reasonCode: "OFFLINE_VALIDATION_UNAVAILABLE",
+    nextAction: "STOP_SCANNER",
+  };
+}
+
+/** The same barcode, in the same workflow step, is the same scan. */
+function scanIdentity(
+  observation: BarcodeDecodeObservation,
+  ctx: WorkflowScanCoordinatorContext,
+): string {
+  return JSON.stringify([
+    ctx.workflow,
+    ctx.workflowEntityId,
+    ctx.workflowStep,
+    ctx.captureIntent.intent,
+    observation.symbology,
+    observation.rawValue,
+  ]);
+}
+
+function resumeFrom(decision: WorkflowScanDecision): Partial<WorkflowAdapterContext> {
+  const result = decision.result;
+  const candidateId =
+    result && typeof result === "object" && "intakeCandidateId" in result
+      ? (result as { intakeCandidateId?: unknown }).intakeCandidateId
+      : undefined;
+  return typeof candidateId === "string" ? { intakeCandidateId: candidateId } : {};
 }

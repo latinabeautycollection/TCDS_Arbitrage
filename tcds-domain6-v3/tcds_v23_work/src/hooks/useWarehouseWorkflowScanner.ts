@@ -1,23 +1,56 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { BarcodeDecodeObservation } from "../lib/scanning/capture/BarcodeDecodeObservation";
 import { useBarcodeScanner } from "./useBarcodeScanner";
 import type { WorkflowScanDecision } from "../lib/scanning/workflow/contracts/WorkflowScanDecision";
 import type { WorkflowScanCoordinatorContext } from "../lib/scanning/workflow/coordinator/WorkflowScanCoordinator";
 import { WorkflowScanCoordinator } from "../lib/scanning/workflow/coordinator/WorkflowScanCoordinator";
+import { classifyWorkflowFailure } from "../lib/scanning/workflow/adapters/workflowFailure";
 
 export interface UseWarehouseWorkflowScannerOptions {
   coordinator: WorkflowScanCoordinator;
   context: WorkflowScanCoordinatorContext;
 }
 
+export type WorkflowCaptureState =
+  | "IDLE"
+  | "CAPTURED"
+  | "VALIDATING"
+  | "WAREHOUSE_ACCEPTED"
+  | "RECONCILING"
+  | "BLOCKED";
+
+function captureStateFor(decision: WorkflowScanDecision): WorkflowCaptureState {
+  if (decision.outcome === "ACCEPTED") return "WAREHOUSE_ACCEPTED";
+  if (decision.outcome === "RECONCILING") return "RECONCILING";
+  return "BLOCKED";
+}
+
 export function useWarehouseWorkflowScanner(
   options: UseWarehouseWorkflowScannerOptions,
 ) {
   const scanner = useBarcodeScanner();
+  const scannerRef = useRef(scanner);
+  scannerRef.current = scanner;
+
   const [decision, setDecision] = useState<WorkflowScanDecision | null>(null);
-  const [captureState, setCaptureState] =
-    useState<"IDLE" | "CAPTURED" | "VALIDATING" | "WAREHOUSE_ACCEPTED" | "RECONCILING" | "BLOCKED">("IDLE");
+  const [captureState, setCaptureState] = useState<WorkflowCaptureState>("IDLE");
   const submittedObservation = useRef<string | null>(null);
+
+  // Every path settles into a decision. Whatever the coordinator throws, the screen is
+  // never left on VALIDATING with the scanner paused.
+  const settle = useCallback(async (run: () => Promise<WorkflowScanDecision>) => {
+    let next: WorkflowScanDecision;
+    try {
+      next = await run();
+    } catch (error) {
+      const failure = classifyWorkflowFailure(error);
+      next = { outcome: "BLOCKED", reasonCode: failure.code, nextAction: "STOP_SCANNER", result: failure };
+    }
+    setDecision(next);
+    setCaptureState(captureStateFor(next));
+    if (next.nextAction === "RESUME_SAME_PROFILE") {
+      await scannerRef.current.resume().catch(() => undefined);
+    }
+  }, []);
 
   useEffect(() => {
     const observation = scanner.observation;
@@ -25,29 +58,15 @@ export function useWarehouseWorkflowScanner(
 
     submittedObservation.current = observation.observationId;
     setCaptureState("CAPTURED");
+    setCaptureState("VALIDATING");
+    void settle(() => options.coordinator.onObservation(observation, options.context));
+  }, [scanner.observation, options, settle]);
 
-    void (async () => {
-      setCaptureState("VALIDATING");
-      const next = await options.coordinator.onObservation(observation, options.context);
-      setDecision(next);
-      setCaptureState(
-        next.outcome === "ACCEPTED"
-          ? "WAREHOUSE_ACCEPTED"
-          : next.outcome === "RECONCILING"
-          ? "RECONCILING"
-          : "BLOCKED",
-      );
-    })();
-  }, [scanner.observation, options]);
-
+  // A retry always targets the scan whose outcome is unknown, not whatever was scanned last.
   const retry = useCallback(async () => {
-    const observation: BarcodeDecodeObservation | null = scanner.observation;
-    if (!observation) return;
     setCaptureState("RECONCILING");
-    const next = await options.coordinator.retry(observation, options.context);
-    setDecision(next);
-    setCaptureState(next.outcome === "ACCEPTED" ? "WAREHOUSE_ACCEPTED" : next.outcome === "RECONCILING" ? "RECONCILING" : "BLOCKED");
-  }, [scanner.observation, options]);
+    await settle(() => options.coordinator.retry(options.context));
+  }, [options, settle]);
 
   return { ...scanner, decision, captureState, retry };
 }
