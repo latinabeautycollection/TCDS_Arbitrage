@@ -125,16 +125,29 @@ if (!baseline || !/^[0-9a-fA-F]{40}$/.test(baseline)) {
   process.exit(1);
 }
 
+// The boundary judges what the 6.2D slice changed. Once 6.2D is merged, set
+// DOMAIN6_2D_HEAD_SHA to its merge commit so later work — the screen wiring above
+// all — is not judged against 6.2D ownership. Defaults to HEAD, as 6.2B and 6.2C do.
+const head = process.env.DOMAIN6_2D_HEAD_SHA?.trim() || "HEAD";
+
+if (head !== "HEAD" && !/^[0-9a-fA-F]{40}$/.test(head)) {
+  console.error(
+    "Domain 6.2D boundary verification FAILED: DOMAIN6_2D_HEAD_SHA must be a full 40-character SHA.",
+  );
+  process.exit(1);
+}
+
 try {
   git(["cat-file", "-e", `${baseline}^{commit}`]);
+  git(["cat-file", "-e", `${head}^{commit}`]);
 } catch {
-  console.error("Domain 6.2D boundary verification FAILED: baseline commit is not available.");
+  console.error("Domain 6.2D boundary verification FAILED: baseline or head commit is not available.");
   process.exit(1);
 }
 
 let changed;
 try {
-  changed = git(["diff", "--name-only", "--diff-filter=ACMRT", `${baseline}...HEAD`])
+  changed = git(["diff", "--name-only", "--diff-filter=ACMRT", `${baseline}...${head}`])
     .split(/\r?\n/)
     .map((value) => value.replaceAll("\\", "/"))
     .filter(Boolean);
@@ -178,7 +191,7 @@ for (const rel of changed) {
   }
 
   if (appRel.startsWith("src/features/")) {
-    violations.push(`${rel}: 6.2D may only modify the approved API helper in a Domain 6 business feature.`);
+    violations.push(`${rel}: 6.2D may not modify a Domain 6 business feature.`);
     continue;
   }
 

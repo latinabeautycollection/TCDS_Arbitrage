@@ -33,21 +33,6 @@ export const DOMAIN6_2D_IMPLEMENTATION = [
   "scripts/scandit/verify-domain6-2d-boundary.mjs",
   "scripts/scandit/sliceOwnership.mjs",
   "docs/domain6-2d/",
-  "database/migrations/",
-];
-
-/**
- * The only Domain 6 business-feature files 6.2D may modify, and only to thread the
- * operation context through the existing authoritative helpers. Every other file in
- * those feature directories stays protected.
- */
-export const DOMAIN6_2D_API_HELPERS = [
-  "src/features/receiving/services/receivingApi.ts",
-  "src/features/storage/services/storageApi.ts",
-  "src/features/picking/services/pickingApi.ts",
-  "src/features/packShip/services/packShipApi.ts",
-  "src/features/inventory/services/inventoryApi.ts",
-  "src/features/returns/services/returnsApi.ts",
 ];
 
 const startsWithAny = (rel, prefixes) =>
@@ -55,10 +40,12 @@ const startsWithAny = (rel, prefixes) =>
     prefix.endsWith("/") ? rel.startsWith(prefix) : rel === prefix,
   );
 
-/** True when the path belongs to 6.2D, including its approved helper changes. */
+/**
+ * True when the path belongs to 6.2D. The database migration and the six API helpers
+ * belong to the Domain 6 backend owner, so they are not on this list.
+ */
 export const isOwnedByDomain6_2D = (rel) =>
-  startsWithAny(rel, DOMAIN6_2D_IMPLEMENTATION) ||
-  DOMAIN6_2D_API_HELPERS.includes(rel);
+  startsWithAny(rel, DOMAIN6_2D_IMPLEMENTATION);
 
 export const isDomain6_2BImplementation = (rel) =>
   startsWithAny(rel, DOMAIN6_2B_IMPLEMENTATION);
