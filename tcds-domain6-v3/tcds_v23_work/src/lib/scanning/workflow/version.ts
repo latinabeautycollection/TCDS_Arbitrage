@@ -1,0 +1,1 @@
+export const DOMAIN6_2D_WORKFLOW_CONTRACT_VERSION = "6.2D.2" as const;

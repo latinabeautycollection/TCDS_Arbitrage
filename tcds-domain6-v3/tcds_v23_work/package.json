@@ -35,7 +35,11 @@
     "scandit:policy:architecture": "node scripts/scandit/verify-domain6-2c-boundary.mjs",
     "scandit:policy:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2c.tsconfig.json",
     "scandit:policy:test": "vitest run --config config/vitest/scandit-6.2c.vitest.config.ts",
-    "scandit:policy:certify": "npm run scandit:capture:certify && npm run scandit:policy:manifest && npm run scandit:policy:architecture && npm run scandit:policy:typecheck && npm run scandit:policy:test && npm run build"
+    "scandit:policy:certify": "npm run scandit:capture:certify && npm run scandit:policy:manifest && npm run scandit:policy:architecture && npm run scandit:policy:typecheck && npm run scandit:policy:test && npm run build",
+    "scandit:workflow:architecture": "node scripts/scandit/verify-domain6-2d-boundary.mjs",
+    "scandit:workflow:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2d.tsconfig.json",
+    "scandit:workflow:test": "vitest run --config config/vitest/scandit-6.2d.vitest.config.ts",
+    "scandit:workflow:certify": "npm run scandit:policy:certify && npm run scandit:workflow:architecture && npm run scandit:workflow:typecheck && npm run scandit:workflow:test && npm run build"
   },
   "dependencies": {
     "@scandit/web-datacapture-barcode": "8.5.3",

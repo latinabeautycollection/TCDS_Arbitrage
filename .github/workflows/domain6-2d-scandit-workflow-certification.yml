@@ -1,0 +1,90 @@
+# Paths and the working directory are adapted to this repository: the
+# application lives in tcds-domain6-v3/tcds_v23_work.
+name: Domain 6.2D Scandit Workflow Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      domain6_2d_baseline_sha:
+        description: "Full 40-character SHA immediately before the 6.2D overlay"
+        required: false
+        type: string
+  # No path filter: this workflow is intended to be a required check, and a
+  # path-filtered workflow never reports a result on pull requests that do not
+  # touch those paths.
+  pull_request:
+
+jobs:
+  workflow-certify:
+    name: 6.2D workflow certification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tcds-domain6-v3/tcds_v23_work
+    env:
+      # scandit:workflow:certify runs the whole certified chain first: 6.2A, then
+      # the 6.2B and 6.2C chains, each verified on its own merged range exactly as
+      # in its own workflow. Repository variables of the same names override both
+      # ends without editing this file.
+      DOMAIN6_2B_BASELINE_SHA: ${{ vars.DOMAIN6_2B_BASELINE_SHA || '675b89bbf859f71e3507731f6bfd8c8b727c180d' }}
+      DOMAIN6_2B_HEAD_SHA: ${{ vars.DOMAIN6_2B_HEAD_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
+      DOMAIN6_2C_BASELINE_SHA: ${{ vars.DOMAIN6_2C_BASELINE_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
+      DOMAIN6_2C_HEAD_SHA: ${{ vars.DOMAIN6_2C_HEAD_SHA || '53fe0a5caf611bf8dd8c506d60e3a66874d505c1' }}
+      # Until 6.2D is merged its boundary judges the pull request itself: the
+      # baseline is the pull request's base and the head is the checkout. Once 6.2D
+      # lands, pin both ends to its merged range, through the repository variables
+      # or by editing these defaults, so later work — the screen wiring above all —
+      # is not judged against 6.2D ownership.
+      DOMAIN6_2D_BASELINE_SHA: ${{ inputs.domain6_2d_baseline_sha || vars.DOMAIN6_2D_BASELINE_SHA || github.event.pull_request.base.sha }}
+      DOMAIN6_2D_HEAD_SHA: ${{ vars.DOMAIN6_2D_HEAD_SHA || '' }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tcds-domain6-v3/tcds_v23_work/package-lock.json
+
+      # Certification fails closed: a missing, malformed or unreachable SHA stops
+      # the run before any check can report a false pass.
+      - name: Validate every baseline and head SHA
+        shell: bash
+        run: |
+          set -euo pipefail
+          check() {
+            local name="$1" value="${!1:-}"
+            if [[ ! "$value" =~ ^[0-9a-fA-F]{40}$ ]]; then
+              echo "::error::$name must be a full 40-character SHA"
+              exit 1
+            fi
+            if ! git cat-file -e "${value}^{commit}"; then
+              echo "::error::$name does not resolve to a commit in this checkout"
+              exit 1
+            fi
+            echo "$name=$value"
+          }
+          for name in DOMAIN6_2B_BASELINE_SHA DOMAIN6_2B_HEAD_SHA DOMAIN6_2C_BASELINE_SHA DOMAIN6_2C_HEAD_SHA DOMAIN6_2D_BASELINE_SHA; do
+            check "$name"
+          done
+          if [[ -n "${DOMAIN6_2D_HEAD_SHA:-}" ]]; then
+            check DOMAIN6_2D_HEAD_SHA
+          else
+            echo "DOMAIN6_2D_HEAD_SHA not set: 6.2D is judged up to the checkout"
+          fi
+
+      - run: npm ci
+
+      # The Scandit runtime files are generated from the approved package and are
+      # not committed, so a clean checkout has to produce them first.
+      - run: npm run scandit:prepare
+
+      # 6.2A, 6.2B, 6.2C, then the 6.2D boundary, strict TypeScript, tests and the
+      # production build. Nothing from the earlier slices is reimplemented here.
+      - run: npm run scandit:workflow:certify
+
+      - run: npm run check --if-present
+      - run: npm run verify --if-present
