@@ -7,7 +7,9 @@ import { useInventory } from './hooks/useInventory';
 import { resolveInventoryScan } from './services/inventoryApi';
 import { InventoryItemCard } from './components/InventoryItemCard';
 import { ManualAdmissionSheet } from './components/ManualAdmissionSheet';
-import type { InventoryFilter } from './types/inventoryTypes';
+import type { InventoryFilter, ScanResolution } from './types/inventoryTypes';
+import { WorkflowScanPanel } from '../../components/scanning/workflow/WorkflowScanPanel';
+import { INVENTORY_SCAN_CONTEXT, createInventoryCoordinator, inventoryCameraScanEnabled } from '../../lib/scanning/workflow/bindings/inventoryWorkflow';
 
 const filters: Array<{ key: InventoryFilter; label: string }> = [
   { key: 'ALL', label: 'All' }, { key: 'AVAILABLE', label: 'Available' }, { key: 'RESERVED', label: 'Reserved' },
@@ -26,13 +28,17 @@ export function InventoryListScreen() {
   const [manualAdmissionOpen, setManualAdmissionOpen] = useState(false);
   const { data, loading, refreshing, error, refresh } = useInventory(query, filter);
 
+  // One handling path for a resolved scan, whether it was typed or captured by the camera.
+  function applyResolution(resolution: ScanResolution) {
+    if (resolution.resolutionType === 'ITEM' && resolution.itemId) navigate(`/inventory/detail?item=${encodeURIComponent(resolution.itemId)}`);
+    else if (resolution.resolutionType === 'LOCATION' && resolution.locationCode) { setQuery(resolution.locationCode); setScanMessage(`Showing inventory at ${resolution.locationCode}`); }
+    else setScanMessage(resolution.message ?? `${resolution.resolutionType.replaceAll('_',' ')} — review required.`);
+  }
+
   async function resolveScan() {
     if (!scanValue.trim()) return;
     try {
-      const resolution = await resolveInventoryScan(scanValue.trim());
-      if (resolution.resolutionType === 'ITEM' && resolution.itemId) navigate(`/inventory/detail?item=${encodeURIComponent(resolution.itemId)}`);
-      else if (resolution.resolutionType === 'LOCATION' && resolution.locationCode) { setQuery(resolution.locationCode); setScanMessage(`Showing inventory at ${resolution.locationCode}`); }
-      else setScanMessage(resolution.message ?? `${resolution.resolutionType.replaceAll('_',' ')} — review required.`);
+      applyResolution(await resolveInventoryScan(scanValue.trim()));
     } catch (caught) { setScanMessage(caught instanceof Error ? caught.message : 'Scan could not be resolved.'); }
   }
 
@@ -49,6 +55,7 @@ export function InventoryListScreen() {
       <ScreenCard>
         <div className="flex items-center gap-2"><ScanLine className="text-tcds-gold"/><h2 className="font-display text-section font-black">Scan-first lookup</h2></div>
         <div className="mt-3 flex gap-2"><input value={scanValue} onChange={(e) => setScanValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void resolveScan(); }} className="min-h-14 min-w-0 flex-1 rounded-2xl border border-tcds-line px-4 text-base" placeholder="Item, serial, location, package…"/><button onClick={() => void resolveScan()} className="min-h-14 rounded-2xl bg-tcds-black px-4 font-black text-white">Resolve</button></div>
+        {inventoryCameraScanEnabled() && <WorkflowScanPanel createCoordinator={createInventoryCoordinator} context={INVENTORY_SCAN_CONTEXT} onAccepted={(decision) => applyResolution(decision.result as ScanResolution)} />}
         {scanMessage && <p className="mt-3 rounded-xl bg-tcds-surface p-3 text-sm font-bold">{scanMessage}</p>}
         <div className="relative mt-4"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-tcds-muted" size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line pl-11 pr-4 text-base" placeholder="Search title, brand, model, serial, bin, order"/></div>
       </ScreenCard>
