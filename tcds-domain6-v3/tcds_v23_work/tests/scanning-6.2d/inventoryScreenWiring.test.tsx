@@ -25,11 +25,11 @@ describe("6.2D Inventory screen wiring", () => {
     expect(screen.getByRole("button", { name: "Resolve" })).toBeTruthy();
   });
 
-  it("adds camera scanning beside the typed entry when the flag is on", () => {
+  it("adds camera scanning beside the typed entry when the flag is on", async () => {
     vi.stubEnv("VITE_SCANDIT_WORKFLOW_INVENTORY", "true");
     renderScreen();
 
-    expect(screen.getByRole("button", { name: "Scan with camera" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Scan with camera" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resolve" })).toBeTruthy();
   });
 });

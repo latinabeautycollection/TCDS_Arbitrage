@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { AlertTriangle, Plus, RefreshCw, ScanLine, Search, ShieldAlert, WifiOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { AppHeader } from '../../components/AppHeader';
@@ -8,8 +8,11 @@ import { resolveInventoryScan } from './services/inventoryApi';
 import { InventoryItemCard } from './components/InventoryItemCard';
 import { ManualAdmissionSheet } from './components/ManualAdmissionSheet';
 import type { InventoryFilter, ScanResolution } from './types/inventoryTypes';
-import { WorkflowScanPanel } from '../../components/scanning/workflow/WorkflowScanPanel';
 import { INVENTORY_SCAN_CONTEXT, createInventoryCoordinator, inventoryCameraScanEnabled } from '../../lib/scanning/workflow/bindings/inventoryWorkflow';
+
+// Loaded only when camera scanning is switched on, so the scanner SDK never enters the
+// main bundle and screens that do not scan never download it.
+const WorkflowScanPanel = lazy(() => import('../../components/scanning/workflow/WorkflowScanPanel').then((m) => ({ default: m.WorkflowScanPanel })));
 
 const filters: Array<{ key: InventoryFilter; label: string }> = [
   { key: 'ALL', label: 'All' }, { key: 'AVAILABLE', label: 'Available' }, { key: 'RESERVED', label: 'Reserved' },
@@ -55,7 +58,7 @@ export function InventoryListScreen() {
       <ScreenCard>
         <div className="flex items-center gap-2"><ScanLine className="text-tcds-gold"/><h2 className="font-display text-section font-black">Scan-first lookup</h2></div>
         <div className="mt-3 flex gap-2"><input value={scanValue} onChange={(e) => setScanValue(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void resolveScan(); }} className="min-h-14 min-w-0 flex-1 rounded-2xl border border-tcds-line px-4 text-base" placeholder="Item, serial, location, package…"/><button onClick={() => void resolveScan()} className="min-h-14 rounded-2xl bg-tcds-black px-4 font-black text-white">Resolve</button></div>
-        {inventoryCameraScanEnabled() && <WorkflowScanPanel createCoordinator={createInventoryCoordinator} context={INVENTORY_SCAN_CONTEXT} onAccepted={(decision) => applyResolution(decision.result as ScanResolution)} />}
+        {inventoryCameraScanEnabled() && <Suspense fallback={null}><WorkflowScanPanel createCoordinator={createInventoryCoordinator} context={INVENTORY_SCAN_CONTEXT} onAccepted={(decision) => applyResolution(decision.result as ScanResolution)} /></Suspense>}
         {scanMessage && <p className="mt-3 rounded-xl bg-tcds-surface p-3 text-sm font-bold">{scanMessage}</p>}
         <div className="relative mt-4"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-tcds-muted" size={18}/><input value={query} onChange={(e) => setQuery(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line pl-11 pr-4 text-base" placeholder="Search title, brand, model, serial, bin, order"/></div>
       </ScreenCard>

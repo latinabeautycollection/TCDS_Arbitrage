@@ -32,6 +32,7 @@ export const DOMAIN6_2D_IMPLEMENTATION = [
   "config/typescript/scandit-6.2d.tsconfig.json",
   "config/vitest/scandit-6.2d.vitest.config.ts",
   "scripts/scandit/verify-domain6-2d-boundary.mjs",
+  "scripts/scandit/verify-domain6-2d-bundle.mjs",
   "scripts/scandit/sliceOwnership.mjs",
   "docs/domain6-2d/",
 ];
