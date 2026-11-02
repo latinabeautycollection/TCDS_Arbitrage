@@ -83,7 +83,7 @@ export function WorkflowScanPanel({ createCoordinator, context, onAccepted }: Wo
         </>
       )}
 
-      {scanner.captureState === "RECONCILING" && (
+      {scanner.retryAvailable && (
         <button type="button" onClick={() => void scanner.retry()} className="min-h-12 w-full rounded-2xl border border-tcds-gold bg-tcds-gold/10 px-4 font-black">
           Retry
         </button>

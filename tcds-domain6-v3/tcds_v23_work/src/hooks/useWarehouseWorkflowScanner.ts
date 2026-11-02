@@ -58,6 +58,9 @@ export function useWarehouseWorkflowScanner(
 
   const [decision, setDecision] = useState<WorkflowScanDecision | null>(null);
   const [captureState, setCaptureState] = useState<WorkflowCaptureState>("IDLE");
+  // Offered while a scan's outcome is unknown, whatever happened since: a different barcode
+  // blocked behind it, a camera restart, or a retry attempted offline.
+  const [retryAvailable, setRetryAvailable] = useState(false);
   const submittedObservation = useRef<string | null>(null);
 
   // Every path settles into a decision. Whatever the coordinator throws, the screen is
@@ -71,10 +74,11 @@ export function useWarehouseWorkflowScanner(
     }
     setDecision(next);
     setCaptureState(captureStateFor(next));
+    setRetryAvailable(next.nextAction === "RECONCILE" || Boolean(coordinator.pendingObservation));
     if (next.nextAction === "RESUME_SAME_PROFILE") {
       await scannerRef.current.resume().catch(() => undefined);
     }
-  }, []);
+  }, [coordinator]);
 
   /** Resolves the capture policy and starts the camera. A refused policy is a decision. */
   const begin = useCallback(async () => {
@@ -104,5 +108,5 @@ export function useWarehouseWorkflowScanner(
     await settle(() => coordinator.retry(contextRef.current));
   }, [coordinator, settle]);
 
-  return { ...scanner, decision, captureState, begin, retry };
+  return { ...scanner, decision, captureState, retryAvailable, begin, retry };
 }
