@@ -29,17 +29,31 @@ function fail(message) {
 const indexPath = path.join(dist, "index.html");
 if (!fs.existsSync(indexPath)) fail("dist/index.html not found; run the production build first.");
 
-const entries = [...fs.readFileSync(indexPath, "utf8").matchAll(/<script[^>]+type="module"[^>]+src="\/?([^"]+\.js)"/g)]
-  .map((match) => match[1]);
+const html = fs.readFileSync(indexPath, "utf8");
+const tags = (name) => [...html.matchAll(new RegExp(`<${name}\\b[^>]*>`, "g"))].map(([tag]) => tag);
+const attribute = (tag, name) => tag.match(new RegExp(`\\s${name}="([^"]+)"`))?.[1];
+
+const entries = tags("script")
+  .filter((tag) => attribute(tag, "type") === "module")
+  .map((tag) => attribute(tag, "src"))
+  .filter(Boolean);
 if (!entries.length) fail("no module entry script found in dist/index.html.");
 
-for (const entry of entries) {
-  const file = path.join(dist, entry);
-  if (!fs.existsSync(file)) fail(`${entry} is referenced but missing.`);
+// A chunk the page preloads downloads for every user, just like the entry, so it is held
+// to the same rule.
+const preloads = tags("link")
+  .filter((tag) => attribute(tag, "rel") === "modulepreload")
+  .map((tag) => attribute(tag, "href"))
+  .filter(Boolean);
+
+for (const reference of [...entries, ...preloads]) {
+  const chunk = reference.replace(/^\//, "");
+  const file = path.join(dist, chunk);
+  if (!fs.existsSync(file)) fail(`${chunk} is referenced but missing.`);
   const text = fs.readFileSync(file, "utf8");
   const found = SDK_MARKERS.filter((marker) => text.includes(marker));
   if (found.length) {
-    fail(`${entry} contains the Scandit SDK (${found.join(", ")}). Load scanning screens lazily.`);
+    fail(`${chunk} contains the Scandit SDK (${found.join(", ")}). Load scanning screens lazily.`);
   }
-  console.log(`Domain 6.2D bundle verification PASSED: ${entry} is ${(fs.statSync(file).size / 1024).toFixed(1)} kB with no Scandit SDK`);
+  console.log(`Domain 6.2D bundle verification PASSED: ${chunk} is ${(fs.statSync(file).size / 1024).toFixed(1)} kB with no Scandit SDK`);
 }

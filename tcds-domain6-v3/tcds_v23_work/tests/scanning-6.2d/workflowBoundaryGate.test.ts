@@ -160,6 +160,38 @@ describe("6.2D inline SQL rule", () => {
     expect(result.code).toBe(1);
     expect(result.output).toMatch(/inline SQL/);
   });
+
+  it("flags real SQL whatever its case", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/binQuery.ts": 'export const sql = "select bin_id from warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
+  });
+
+  it("excludes the listed interface text only, not SQL beside it", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx":
+        'export const hint = "Select a bin from the list";\nexport const sql = "delete from warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
+  });
+
+  it("still flags other text that reads like SQL until it is listed", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx": 'export const hint = "Select a bin from the shelf";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    expect(runGate(app, baseline).code).toBe(1);
+  });
 });
 
 describe("6.2D slice ownership", () => {

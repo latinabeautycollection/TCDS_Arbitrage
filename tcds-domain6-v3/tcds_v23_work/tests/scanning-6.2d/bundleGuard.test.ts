@@ -8,15 +8,17 @@ import { afterAll, describe, expect, it } from "vitest";
 const script = path.resolve(process.cwd(), "scripts/scandit/verify-domain6-2d-bundle.mjs");
 const dirs: string[] = [];
 
-function build(entryContents: string | null): string {
+function build(entryContents: string | null, preloadContents?: string | null): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "domain6-2d-bundle-"));
   dirs.push(dir);
   fs.mkdirSync(path.join(dir, "dist/assets"), { recursive: true });
+  const preloadTag = preloadContents === undefined ? "" : '<link rel="modulepreload" crossorigin href="/assets/vendor-def.js">';
   fs.writeFileSync(
     path.join(dir, "dist/index.html"),
-    '<script type="module" crossorigin src="/assets/index-abc.js"></script>',
+    `<script type="module" crossorigin src="/assets/index-abc.js"></script>${preloadTag}`,
   );
   if (entryContents !== null) fs.writeFileSync(path.join(dir, "dist/assets/index-abc.js"), entryContents);
+  if (typeof preloadContents === "string") fs.writeFileSync(path.join(dir, "dist/assets/vendor-def.js"), preloadContents);
   return dir;
 }
 
@@ -54,5 +56,23 @@ describe("6.2D bundle guard", () => {
     const result = run(build(null));
     expect(result.code).toBe(1);
     expect(result.output).toMatch(/missing/);
+  });
+
+  it("checks every preloaded chunk as well as the entry", () => {
+    const result = run(build('console.log("app");', 'console.log("vendor");'));
+    expect(result.code).toBe(0);
+    expect(result.output).toMatch(/vendor-def\.js is .* with no Scandit SDK/);
+  });
+
+  it("fails when a preloaded chunk contains the Scandit SDK", () => {
+    const result = run(build('console.log("app");', "class DataCaptureView extends HTMLElement {}"));
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/vendor-def\.js contains the Scandit SDK/);
+  });
+
+  it("fails closed when a preloaded chunk is missing", () => {
+    const result = run(build('console.log("app");', null));
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/vendor-def\.js is referenced but missing/);
   });
 });
