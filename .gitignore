@@ -55,3 +55,6 @@ ecosystem.comp.config.js
 /patch_domain1_json.py
 /patch_domain1_runs.py
 /patch_domain1_worker.py
+
+# Seeds holding real personal data
+*PRIVATE_DO_NOT_COMMIT*
