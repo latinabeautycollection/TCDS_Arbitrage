@@ -36,6 +36,10 @@ function walk(p) {
  * 1. Source content rules
  * ------------------------------------------------------------------ */
 
+// Interface text that reads like SQL. Each phrase is matched exactly and removed before
+// the inline-SQL rule runs, so anything else that reads like SQL still fails.
+const SQL_LIKE_INTERFACE_TEXT = ["Select a bin from the list"];
+
 // Real database coupling, not the mere appearance of a word. A readiness field
 // named `postgres` is a status label, not a database client.
 const databaseCoupling = [
@@ -56,7 +60,10 @@ const databaseCoupling = [
     detail: "executes a query through a database client",
   },
   {
-    pattern: /\b(?:SELECT\s+[\s\S]{0,200}?\sFROM\s|INSERT\s+INTO\s|UPDATE\s+[A-Za-z_."]+\s+SET\s|DELETE\s+FROM\s)/i,
+    // SQL keywords in any case followed by a real identifier. Interface text is excluded
+    // by its exact wording, never by loosening the pattern.
+    pattern: /\b(?:SELECT\s+[\w*.,\s"()]{1,200}?\s+FROM\s+[A-Za-z_][\w."]*|INSERT\s+INTO\s+[A-Za-z_][\w."]*|UPDATE\s+[A-Za-z_][\w."]*\s+SET\s|DELETE\s+FROM\s+[A-Za-z_][\w."]*)/i,
+    ignore: SQL_LIKE_INTERFACE_TEXT,
     detail: "contains inline SQL",
   },
   {
@@ -74,8 +81,9 @@ for (const file of walk("src").filter((f) => /\.(ts|tsx)$/.test(f))) {
   }
 
   if (rel.startsWith("src/features/")) {
-    for (const { pattern, detail } of databaseCoupling) {
-      if (pattern.test(text)) {
+    for (const { pattern, detail, ignore = [] } of databaseCoupling) {
+      const subject = ignore.reduce((remaining, phrase) => remaining.replaceAll(phrase, ""), text);
+      if (pattern.test(subject)) {
         violations.push(`${rel}: ${detail}; business features reach the database through the existing services only`);
       }
     }
@@ -102,6 +110,15 @@ if (fs.existsSync(workflowDir)) {
     if (text.includes(`"${token}"`) || text.includes(`'${token}'`)) {
       violations.push(`6.2D workflow advertises unsupported symbology ${token}`);
     }
+  }
+
+  // One HTTP path. Scans reach the warehouse only through the existing authoritative
+  // API helpers, so the workflow layer may neither issue a request nor name a route.
+  if (/\bfetch\s*\(/.test(text)) {
+    violations.push("6.2D workflow issues its own HTTP request; scans must go through the existing API helpers");
+  }
+  if (text.includes("/api/v1/")) {
+    violations.push("6.2D workflow names an API route; scans must go through the existing API helpers");
   }
 
   if (/class\s+(ReceivingRepository|PutawayRepository|PickingRepository|PackingRepository|InventoryRepository|ReturnsRepository|OutboundRepository)\b/.test(text)) {

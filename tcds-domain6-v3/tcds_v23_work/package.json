@@ -39,7 +39,8 @@
     "scandit:workflow:architecture": "node scripts/scandit/verify-domain6-2d-boundary.mjs",
     "scandit:workflow:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2d.tsconfig.json",
     "scandit:workflow:test": "vitest run --config config/vitest/scandit-6.2d.vitest.config.ts",
-    "scandit:workflow:certify": "npm run scandit:policy:certify && npm run scandit:workflow:architecture && npm run scandit:workflow:typecheck && npm run scandit:workflow:test && npm run build"
+    "scandit:workflow:certify": "npm run scandit:policy:certify && npm run scandit:workflow:architecture && npm run scandit:workflow:typecheck && npm run scandit:workflow:test && npm run build && npm run scandit:workflow:verify-bundle",
+    "scandit:workflow:verify-bundle": "node scripts/scandit/verify-domain6-2d-bundle.mjs"
   },
   "dependencies": {
     "@scandit/web-datacapture-barcode": "8.5.3",
