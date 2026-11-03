@@ -30,13 +30,12 @@ jobs:
       DOMAIN6_2B_HEAD_SHA: ${{ vars.DOMAIN6_2B_HEAD_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
       DOMAIN6_2C_BASELINE_SHA: ${{ vars.DOMAIN6_2C_BASELINE_SHA || '175cadfcececd37bffa546588976a6de7f5b3428' }}
       DOMAIN6_2C_HEAD_SHA: ${{ vars.DOMAIN6_2C_HEAD_SHA || '53fe0a5caf611bf8dd8c506d60e3a66874d505c1' }}
-      # Until 6.2D is merged its boundary judges the pull request itself: the
-      # baseline is the pull request's base and the head is the checkout. Once 6.2D
-      # lands, pin both ends to its merged range, through the repository variables
-      # or by editing these defaults, so later work — the screen wiring above all —
-      # is not judged against 6.2D ownership.
-      DOMAIN6_2D_BASELINE_SHA: ${{ inputs.domain6_2d_baseline_sha || vars.DOMAIN6_2D_BASELINE_SHA || github.event.pull_request.base.sha }}
-      DOMAIN6_2D_HEAD_SHA: ${{ vars.DOMAIN6_2D_HEAD_SHA || '' }}
+      # 6.2D is merged (PR #9, 4ee4e28), so its boundary is re-verified on its own
+      # range (4917491...4ee4e28) instead of judging every later pull request, the
+      # screen wiring above all, against 6.2D ownership. The content rules still
+      # apply to the whole source tree on every run.
+      DOMAIN6_2D_BASELINE_SHA: ${{ inputs.domain6_2d_baseline_sha || vars.DOMAIN6_2D_BASELINE_SHA || '4917491d841b95b99fc82604eb79bb8e9d65b440' }}
+      DOMAIN6_2D_HEAD_SHA: ${{ vars.DOMAIN6_2D_HEAD_SHA || '4ee4e28ecde1cda086825485cebb859e3d24e721' }}
 
     steps:
       - uses: actions/checkout@v4

@@ -1,138 +1,190 @@
 import type { WarehouseScanEnvelope } from "../contracts/WarehouseScanEnvelope";
+import type { WarehouseCaptureIntentType } from "../contracts/WarehouseCaptureIntent";
 import type { WorkflowScanDecision } from "../contracts/WorkflowScanDecision";
+import type { OperationRequestContext } from "../operation/WarehouseClientOperation";
+import type { WorkflowPortSet } from "./WorkflowPorts";
 import type {
-  ReceivingWorkflowPort,
-  PutawayWorkflowPort,
-  PickingWorkflowPort,
-  PackShipWorkflowPort,
-  InventoryWorkflowPort,
-  ReturnsWorkflowPort,
-} from "./WorkflowPorts";
+  IntakeItemDraft,
+  IntakeVerificationResult,
+} from "../../../../features/receiving/types/receivingTypes";
+import type { PickTask, ScanResult } from "../../../../features/picking/types/pickingTypes";
+import type { ReturnType as ReturnClassification } from "../../../../features/returns/types/returnTypes";
+import { classifyWorkflowFailure } from "./workflowFailure";
 
 export interface WorkflowAdapterContext {
+  /** Putaway and packing carry the server row version explicitly. */
   rowVersion?: number;
-  claimToken?: string;
-  lineId?: string;
+  /** Picking passes the whole task: its row version, claim token and current line. */
+  pickTask?: PickTask;
+  /** Receiving item scans: the open session and the item draft the screen has built. */
+  receivingSessionId?: string;
+  intakeDraft?: IntakeItemDraft;
+  /** Set when resuming a receiving scan whose candidate was already created. */
+  intakeCandidateId?: string;
   shipmentId?: string;
   packageBarcode?: string;
+  returnType?: ReturnClassification;
 }
 
+const SERIAL_INTENTS: readonly WarehouseCaptureIntentType[] = ["SERIAL", "IMEI", "MAC_ADDRESS"];
+
 export class ProductionWorkflowAdapter {
-  constructor(
-    private readonly ports: {
-      receiving: ReceivingWorkflowPort;
-      putaway: PutawayWorkflowPort;
-      picking: PickingWorkflowPort;
-      packShip: PackShipWorkflowPort;
-      inventory: InventoryWorkflowPort;
-      returns: ReturnsWorkflowPort;
-    },
-  ) {}
+  constructor(private readonly ports: WorkflowPortSet) {}
 
   async submit(
     envelope: WarehouseScanEnvelope,
     context: WorkflowAdapterContext,
   ): Promise<WorkflowScanDecision> {
-    const op = {
+    const op: OperationRequestContext = {
       clientOperationId: envelope.clientOperationId,
       correlationId: envelope.correlationId,
     };
     const raw = envelope.observation.rawValue;
+    const intent = envelope.captureIntent.intent;
 
     switch (envelope.workflow) {
       case "RECEIVING":
-        if (envelope.captureIntent.intent === "PACKAGE_ID") {
+        if (intent === "PACKAGE_ID") {
           return accepted(await this.ports.receiving.matchPackage(raw, op));
         }
-        return accepted(await this.ports.receiving.submitItemScan(raw, op));
+        return this.receiveItem(raw, intent, context, op);
 
       case "PUTAWAY":
-        requireRowVersion(context.rowVersion);
-        if (envelope.captureIntent.intent === "ITEM_ID") {
-          return accepted(await this.ports.putaway.scanItem(
-            envelope.workflowEntityId, raw, context.rowVersion!, op,
-          ));
+        if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
+        if (intent === "ITEM_ID") {
+          return accepted(await this.ports.putaway.scanItem(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
-        if (envelope.captureIntent.intent === "LOCATION_ID") {
-          return accepted(await this.ports.putaway.scanLocation(
-            envelope.workflowEntityId, raw, context.rowVersion!, op,
-          ));
+        if (intent === "LOCATION_ID") {
+          return accepted(await this.ports.putaway.scanLocation(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
         return blocked("INVALID_CAPTURE_INTENT");
 
-      case "PICKING":
-        requireRowVersion(context.rowVersion);
-        if (!context.claimToken) return blocked("TASK_CLAIM_REQUIRED");
-        if (envelope.captureIntent.intent === "LOCATION_ID") {
-          return accepted(await this.ports.picking.scanLocation(
-            envelope.workflowEntityId, raw, context.rowVersion!, context.claimToken, op,
-          ));
-        }
-        if (envelope.captureIntent.intent === "ITEM_ID") {
-          if (!context.lineId) return blocked("PICK_LINE_REQUIRED");
-          return accepted(await this.ports.picking.scanItem(
-            envelope.workflowEntityId, context.lineId, raw,
-            context.rowVersion!, context.claimToken, op,
-          ));
-        }
-        if (envelope.captureIntent.intent === "TOTE_ID") {
-          return accepted(await this.ports.picking.scanDestination(
-            envelope.workflowEntityId, raw, context.rowVersion!, context.claimToken, op,
-          ));
-        }
+      case "PICKING": {
+        const task = context.pickTask;
+        if (!task) return blocked("PICK_TASK_REQUIRED");
+        if (intent === "LOCATION_ID") return fromPickScan(await this.ports.picking.scanLocation(task, raw, op));
+        if (intent === "ITEM_ID") return fromPickScan(await this.ports.picking.scanItem(task, raw, op));
+        if (intent === "TOTE_ID") return fromPickScan(await this.ports.picking.scanDestination(task, raw, op));
         return blocked("INVALID_CAPTURE_INTENT");
+      }
 
       case "PACKING":
-        requireRowVersion(context.rowVersion);
+        if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
         if (envelope.workflowStep === "PACK_SOURCE") {
-          return accepted(await this.ports.packShip.scanSource(
-            envelope.workflowEntityId, raw, context.rowVersion!, op,
-          ));
+          return accepted(await this.ports.packShip.scanSource(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
         if (envelope.workflowStep === "PACK_ITEM") {
-          return accepted(await this.ports.packShip.scanItem(
-            envelope.workflowEntityId, raw, context.rowVersion!, op,
-          ));
+          return accepted(await this.ports.packShip.scanItem(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
         if (envelope.workflowStep === "PACK_VERIFY_LABEL") {
-          if (!context.shipmentId || !context.packageBarcode) {
-            return blocked("LABEL_CONTEXT_REQUIRED");
-          }
-          return accepted(await this.ports.packShip.verifyLabel(
-            context.shipmentId, raw, context.packageBarcode, op,
-          ));
+          if (!context.shipmentId || !context.packageBarcode) return blocked("LABEL_CONTEXT_REQUIRED");
+          return accepted(await this.ports.packShip.verifyLabel(context.shipmentId, raw, context.packageBarcode, op));
         }
         return blocked("INVALID_WORKFLOW_STEP");
 
       case "OUTBOUND":
         if (!context.shipmentId) return blocked("SHIPMENT_REQUIRED");
-        return accepted(await this.ports.packShip.stageOutbound(
-          context.shipmentId, raw, op,
-        ));
+        return accepted(await this.ports.packShip.stageOutbound(context.shipmentId, raw, op));
 
       case "INVENTORY":
-        return accepted(await this.ports.inventory.resolveScan(raw, op));
+        return resolved(await this.ports.inventory.resolveScan(raw, op));
 
       case "RETURNS":
-        return accepted(await this.ports.returns.resolveScan(raw, op));
+        return resolved(await this.ports.returns.resolveScan(raw, context.returnType, op));
 
       default:
         return blocked("UNSUPPORTED_WORKFLOW");
     }
   }
-}
 
-function requireRowVersion(value: number | undefined): asserts value is number {
-  if (value === undefined) throw new Error("ROW_VERSION_REQUIRED");
+  /**
+   * Receiving item scans go through the existing candidate steps: create, validate,
+   * verify. The scan supplies only the identifier. Every other field of the draft,
+   * including the employee's confirmation, comes from the screen, and nothing here
+   * completes the session.
+   *
+   * Once the candidate exists, a lost response must not create a second one. A failure
+   * after creation therefore returns the candidate id with a reconciling decision, and a
+   * retry carrying `intakeCandidateId` resumes at validation instead of creating again.
+   */
+  private async receiveItem(
+    raw: string,
+    intent: WarehouseCaptureIntentType,
+    context: WorkflowAdapterContext,
+    op: OperationRequestContext,
+  ): Promise<WorkflowScanDecision> {
+    let candidateId = context.intakeCandidateId;
+
+    if (!candidateId) {
+      if (!context.receivingSessionId || !context.intakeDraft) return blocked("RECEIVING_CONTEXT_REQUIRED");
+
+      let draft: IntakeItemDraft;
+      if (SERIAL_INTENTS.includes(intent)) draft = { ...context.intakeDraft, serialNumber: raw };
+      else if (intent === "ITEM_ID") draft = { ...context.intakeDraft, upc: raw };
+      else return blocked("INVALID_CAPTURE_INTENT");
+
+      const candidate = await this.ports.receiving.createCandidate(context.receivingSessionId, draft, op);
+      candidateId = candidate.intakeCandidateId;
+    }
+
+    try {
+      const validation = await this.ports.receiving.validateCandidate(candidateId, op);
+      if (!validation.passed) {
+        return {
+          outcome: "REJECTED",
+          reasonCode: "CANDIDATE_VALIDATION_FAILED",
+          nextAction: "PAUSE_FOR_DOMAIN_STEP",
+          result: { intakeCandidateId: candidateId, errors: validation.errors },
+        };
+      }
+      return fromVerification(candidateId, await this.ports.receiving.verifyCandidate(candidateId, op));
+    } catch (error) {
+      const failure = classifyWorkflowFailure(error);
+      if (failure.kind === "UNCERTAIN") {
+        return {
+          outcome: "RECONCILING",
+          reasonCode: "RECONCILIATION_REQUIRED",
+          nextAction: "RECONCILE",
+          result: { intakeCandidateId: candidateId, failure },
+        };
+      }
+      throw error;
+    }
+  }
 }
 
 function accepted(result: unknown): WorkflowScanDecision {
-  return {
-    outcome: "ACCEPTED",
-    reasonCode: "SCAN_ACCEPTED",
-    nextAction: "PAUSE_FOR_DOMAIN_STEP",
-    result,
-  };
+  return { outcome: "ACCEPTED", reasonCode: "SCAN_ACCEPTED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+}
+
+/** Inventory and returns resolve an identity; they never decide a business outcome. */
+function resolved(result: unknown): WorkflowScanDecision {
+  return { outcome: "ACCEPTED", reasonCode: "SCAN_RESOLVED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+}
+
+/** Picking answers with its own verdict, so a returned scan is not automatically success. */
+function fromPickScan(result: ScanResult): WorkflowScanDecision {
+  return result.accepted
+    ? { outcome: "ACCEPTED", reasonCode: result.code || "SCAN_ACCEPTED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result }
+    : { outcome: "REJECTED", reasonCode: result.code || "SCAN_REJECTED", nextAction: "RESUME_SAME_PROFILE", result };
+}
+
+function fromVerification(intakeCandidateId: string, verification: IntakeVerificationResult): WorkflowScanDecision {
+  const result = { intakeCandidateId, verification };
+  switch (verification.status) {
+    case "VERIFIED":
+      return { outcome: "ACCEPTED", reasonCode: "CANDIDATE_VERIFIED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+    case "VERIFIED_WITH_WARNING":
+      return { outcome: "ACCEPTED", reasonCode: "CANDIDATE_VERIFIED_WITH_WARNING", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+    case "REVIEW_REQUIRED":
+      return { outcome: "REVIEW_REQUIRED", reasonCode: "CANDIDATE_REVIEW_REQUIRED", nextAction: "SUPERVISOR_REVIEW", result };
+    case "REJECTED":
+      return { outcome: "REJECTED", reasonCode: "CANDIDATE_REJECTED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+    default:
+      // PENDING or PROCESSING: verification is still running on the server. The existing
+      // Receiving screen follows it through verificationStatus; the scan has done its part.
+      return { outcome: "REVIEW_REQUIRED", reasonCode: "VERIFICATION_PENDING", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
+  }
 }
 
 function blocked(reasonCode: string): WorkflowScanDecision {

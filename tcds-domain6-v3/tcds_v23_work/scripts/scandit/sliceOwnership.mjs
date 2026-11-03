@@ -26,11 +26,13 @@ export const DOMAIN6_2C_IMPLEMENTATION = [
 /** 6.2D owns the workflow integration layer. */
 export const DOMAIN6_2D_IMPLEMENTATION = [
   "src/lib/scanning/workflow/",
+  "src/components/scanning/workflow/",
   "src/hooks/useWarehouseWorkflowScanner.ts",
   "tests/scanning-6.2d/",
   "config/typescript/scandit-6.2d.tsconfig.json",
   "config/vitest/scandit-6.2d.vitest.config.ts",
   "scripts/scandit/verify-domain6-2d-boundary.mjs",
+  "scripts/scandit/verify-domain6-2d-bundle.mjs",
   "scripts/scandit/sliceOwnership.mjs",
   "docs/domain6-2d/",
 ];

@@ -37,7 +37,7 @@ function git(cwd: string, args: string[]): string {
   }).trim();
 }
 
-function createRepository(): { app: string; baseline: string } {
+function createRepository(extraBaseline: Record<string, string> = {}): { app: string; baseline: string } {
   const repository = fs.mkdtempSync(path.join(os.tmpdir(), "domain6-2d-boundary-"));
   workspaces.push(repository);
 
@@ -47,7 +47,7 @@ function createRepository(): { app: string; baseline: string } {
   git(repository, ["config", "user.email", "certification@example.invalid"]);
   git(repository, ["config", "user.name", "Domain 6.2D certification"]);
 
-  for (const [relativeFile, contents] of Object.entries(baselineFiles)) {
+  for (const [relativeFile, contents] of Object.entries({ ...baselineFiles, ...extraBaseline })) {
     const full = path.join(app, relativeFile);
     fs.mkdirSync(path.dirname(full), { recursive: true });
     fs.writeFileSync(full, contents);
@@ -140,6 +140,60 @@ describe("6.2D database-coupling rules", () => {
   });
 });
 
+describe("6.2D inline SQL rule", () => {
+  it("does not flag ordinary interface text", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx": 'export const hint = "Select a bin from the list";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    expect(runGate(app, baseline).code).toBe(0);
+  });
+
+  it("still flags real SQL in a feature", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/binQuery.ts": 'export const sql = "SELECT bin_id FROM warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
+  });
+
+  it("flags real SQL whatever its case", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/binQuery.ts": 'export const sql = "select bin_id from warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
+  });
+
+  it("excludes the listed interface text only, not SQL beside it", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx":
+        'export const hint = "Select a bin from the list";\nexport const sql = "delete from warehouse.bins";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    const result = runGate(app, baseline);
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/inline SQL/);
+  });
+
+  it("still flags other text that reads like SQL until it is listed", () => {
+    const { app, baseline } = createRepository({
+      "src/features/storage/BinPicker.tsx": 'export const hint = "Select a bin from the shelf";\n',
+    });
+    commit(app, OWNED, "export const revision = 2;\n");
+
+    expect(runGate(app, baseline).code).toBe(1);
+  });
+});
+
 describe("6.2D slice ownership", () => {
   it("passes when only 6.2D-owned files change", () => {
     const { app, baseline } = createRepository();
@@ -212,6 +266,26 @@ describe("6.2D slice ownership", () => {
 
     expect(result.code).toBe(1);
     expect(result.output).toMatch(/DOMAIN6_2D_HEAD_SHA must be a full 40-character SHA/);
+  });
+
+  it("fails when the workflow layer issues its own HTTP request", () => {
+    const { app, baseline } = createRepository();
+    commit(app, "src/lib/scanning/workflow/adapters/productionApiPorts.ts", 'export const call = () => fetch("/x");\n');
+
+    const result = runGate(app, baseline);
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/issues its own HTTP request/);
+  });
+
+  it("fails when the workflow layer names an API route", () => {
+    const { app, baseline } = createRepository();
+    commit(app, "src/lib/scanning/workflow/adapters/productionApiPorts.ts", 'export const route = "/api/v1/picks";\n');
+
+    const result = runGate(app, baseline);
+
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/names an API route/);
   });
 
   it("fails closed when the baseline SHA is absent", () => {

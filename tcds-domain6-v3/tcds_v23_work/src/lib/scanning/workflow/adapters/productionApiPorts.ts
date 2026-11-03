@@ -1,135 +1,72 @@
+import { receivingApi } from "../../../../features/receiving/services/receivingApi";
+import {
+  scanItem as storageScanItem,
+  scanLocation as storageScanLocation,
+} from "../../../../features/storage/services/storageApi";
+import { pickingApi } from "../../../../features/picking/services/pickingApi";
+import { packShipApi } from "../../../../features/packShip/services/packShipApi";
+import { resolveInventoryScan } from "../../../../features/inventory/services/inventoryApi";
+import { returnsApi } from "../../../../features/returns/services/returnsApi";
+import type { WorkflowPortSet } from "./WorkflowPorts";
 import type { OperationRequestContext } from "../operation/WarehouseClientOperation";
-import { operationHeaders } from "../operation/WarehouseClientOperation";
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "");
+type Uuid = ReturnType<Crypto["randomUUID"]>;
 
-async function request<T>(
-  path: string,
-  operation: OperationRequestContext,
-  init: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: "include",
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      ...operationHeaders(operation),
-      ...(init.headers || {}),
-    },
-  });
-  if (response.status === 401) throw new Error("SESSION_EXPIRED");
-  if (response.status === 409) throw new Error("CONFLICT");
-  if (response.status === 412) throw new Error("STALE_VERSION");
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
-    throw new Error(body?.code || `HTTP_${response.status}`);
-  }
-  return response.status === 204 ? (undefined as T) : response.json() as Promise<T>;
+const UUID_FORMAT = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The storage helper types its idempotency key as a UUID. The operation identity is
+ * created with crypto.randomUUID(), so it is one; this checks rather than assumes it.
+ */
+function operationKey(op: OperationRequestContext): Uuid {
+  if (!UUID_FORMAT.test(op.clientOperationId)) throw new Error("OPERATION_ID_INVALID");
+  return op.clientOperationId as Uuid;
 }
 
-export const productionWorkflowPorts = {
+/**
+ * Binds the 6.2D ports to the six existing authoritative API helpers. This module makes
+ * no HTTP call of its own: there is one HTTP path, one error contract per helper, and one
+ * retry model, all of them the helpers'.
+ *
+ * Operation context. Every port receives the operation. The storage scan calls already
+ * accept an idempotency key, so they receive the stable operation identity now. The other
+ * helpers still generate their own identity per call until they are extended to accept
+ * the operation; the parameter is in place so that change is a one-line edit here.
+ */
+export const productionWorkflowPorts: WorkflowPortSet = {
   receiving: {
-    matchPackage(identifier: string, op: OperationRequestContext) {
-      return request("/api/v1/receiving/packages/match", op, {
-        method: "POST",
-        body: JSON.stringify({ identifier }),
-      });
-    },
-    submitItemScan(value: string, op: OperationRequestContext) {
-      // The authoritative production receiving screen must supply candidate/session
-      // state. This endpoint wrapper intentionally does not invent a new receiving
-      // state transition. It routes to the existing scan/candidate integration
-      // endpoint added during V2.2 merge.
-      return request("/api/v1/receiving/scan-observation", op, {
-        method: "POST",
-        body: JSON.stringify({ value }),
-      });
-    },
+    matchPackage: (identifier) => receivingApi.matchPackage(identifier),
+    createCandidate: (sessionId, draft) => receivingApi.createCandidate(sessionId, draft),
+    validateCandidate: (candidateId) => receivingApi.validateCandidate(candidateId),
+    verifyCandidate: (candidateId) => receivingApi.verifyCandidate(candidateId),
   },
 
   putaway: {
-    scanItem(sessionId: string, barcode: string, rowVersion: number, op: OperationRequestContext) {
-      return request(`/api/v1/put-away/sessions/${encodeURIComponent(sessionId)}/scan-item`, op, {
-        method: "POST",
-        body: JSON.stringify({ barcode, rowVersion, clientOccurredAt: new Date().toISOString() }),
-      });
-    },
-    scanLocation(sessionId: string, barcode: string, rowVersion: number, op: OperationRequestContext) {
-      return request(`/api/v1/put-away/sessions/${encodeURIComponent(sessionId)}/scan-location`, op, {
-        method: "POST",
-        body: JSON.stringify({ barcode, rowVersion, clientOccurredAt: new Date().toISOString() }),
-      });
-    },
+    scanItem: async (sessionId, barcode, rowVersion, op) =>
+      storageScanItem(sessionId, barcode, rowVersion, operationKey(op)),
+    scanLocation: async (sessionId, barcode, rowVersion, op) =>
+      storageScanLocation(sessionId, barcode, rowVersion, operationKey(op)),
   },
 
   picking: {
-    scanLocation(taskId: string, barcode: string, rowVersion: number, claimToken: string, op: OperationRequestContext) {
-      return request(`/api/v1/picks/tasks/${encodeURIComponent(taskId)}/scan-location`, op, {
-        method: "POST",
-        headers: { "If-Match": String(rowVersion) },
-        body: JSON.stringify({ barcode, claimToken }),
-      });
-    },
-    scanItem(taskId: string, lineId: string, barcode: string, rowVersion: number, claimToken: string, op: OperationRequestContext) {
-      return request(`/api/v1/picks/tasks/${encodeURIComponent(taskId)}/scan-item`, op, {
-        method: "POST",
-        headers: { "If-Match": String(rowVersion) },
-        body: JSON.stringify({ barcode, claimToken, lineId }),
-      });
-    },
-    scanDestination(taskId: string, barcode: string, rowVersion: number, claimToken: string, op: OperationRequestContext) {
-      return request(`/api/v1/picks/tasks/${encodeURIComponent(taskId)}/scan-destination`, op, {
-        method: "POST",
-        headers: { "If-Match": String(rowVersion) },
-        body: JSON.stringify({ barcode, claimToken }),
-      });
-    },
+    scanLocation: (task, barcode) => pickingApi.scanLocation(task, barcode),
+    scanItem: (task, barcode) => pickingApi.scanItem(task, barcode),
+    scanDestination: (task, barcode) => pickingApi.scanDestination(task, barcode),
   },
 
   packShip: {
-    scanSource(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext) {
-      return request(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}/scan-source`, op, {
-        method: "POST",
-        body: JSON.stringify({ barcode, rowVersion }),
-      });
-    },
-    scanItem(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext) {
-      return request(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}/scan-item`, op, {
-        method: "POST",
-        body: JSON.stringify({ barcode, rowVersion }),
-      });
-    },
-    verifyLabel(shipmentId: string, trackingBarcode: string, packageBarcode: string, op: OperationRequestContext) {
-      return request(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/label/verify`, op, {
-        method: "POST",
-        body: JSON.stringify({ trackingBarcode, packageBarcode }),
-      });
-    },
-    stageOutbound(shipmentId: string, locationBarcode: string, op: OperationRequestContext) {
-      return request(`/api/v1/shipments/${encodeURIComponent(shipmentId)}/outbound-stage`, op, {
-        method: "POST",
-        body: JSON.stringify({ locationBarcode }),
-      });
-    },
+    scanSource: (taskId, barcode, rowVersion) => packShipApi.scanSource(taskId, barcode, rowVersion),
+    scanItem: (taskId, barcode, rowVersion) => packShipApi.scanItem(taskId, barcode, rowVersion),
+    verifyLabel: (shipmentId, trackingBarcode, packageBarcode) =>
+      packShipApi.verifyLabel(shipmentId, trackingBarcode, packageBarcode),
+    stageOutbound: (shipmentId, locationBarcode) => packShipApi.stageOutbound(shipmentId, locationBarcode),
   },
 
   inventory: {
-    resolveScan(value: string, op: OperationRequestContext) {
-      return request("/api/v1/inventory/resolve-scan", op, {
-        method: "POST",
-        body: JSON.stringify({ value }),
-      });
-    },
+    resolveScan: (value) => resolveInventoryScan(value),
   },
 
   returns: {
-    resolveScan(value: string, op: OperationRequestContext) {
-      return request("/api/v1/returns/resolve-scan", op, {
-        method: "POST",
-        body: JSON.stringify({ value }),
-      });
-    },
+    resolveScan: (value, returnType) => returnsApi.resolveScan(value, returnType),
   },
 };
