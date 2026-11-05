@@ -1,0 +1,93 @@
+--- a/src/services/passwordResetService.ts
++++ b/src/services/passwordResetService.ts
+@@ -1,8 +1,9 @@
+-import type {DbPool} from "../db/pool.js";
++import {tx,type DbPool} from "../db/pool.js";
+ import type {IdentityEnv} from "../config/env.js";
+ import type {RequestIds} from "../models/types.js";
+ import {PasswordService} from "./passwordService.js";
+ import {keyedHash,randomToken} from "../security/crypto.js";
++import {IdentityError} from "../errors/errors.js";
+ import {IdentityRepository} from "../repositories/identityRepository.js";
+ 
+ export class PasswordResetService{
+@@ -34,33 +35,51 @@
+   }
+ 
+   async consume(
+-    requestId:string,claimToken:string,browserBinding:string,newPassword:string,ids:RequestIds
++    requestId:string,claimToken:string,browserBinding:string,newPassword:string,ids:RequestIds,
++    proofId:string|null=null
+   ){
+     const u=await this.pool.query(
+       `SELECT * FROM warehouse_identity.runtime_password_reset_subject_v1($1)`,
+       [requestId]
+     );
+     const row:any=u.rows[0];
+-    if(!row)throw new Error("RESET_NOT_FOUND");
++    if(!row)throw new IdentityError("RESET_NOT_FOUND",404);
+ 
+     const policy=await this.repo.activePolicy();
+-    this.passwords.enforceBasic(newPassword,policy,[row.username,row.employee_number]);
++    try{this.passwords.enforceBasic(newPassword,policy,[row.username,row.employee_number]);}
++    catch(e){throw new IdentityError(e instanceof Error?e.message:"PASSWORD_POLICY",400);}
+ 
+-    if(await this.passwords.breached(newPassword,policy.breachedCheckRequired))
+-      throw new Error("PASSWORD_BREACHED");
++    let breached:boolean;
++    try{breached=await this.passwords.breached(newPassword,policy.breachedCheckRequired);}
++    catch{throw new IdentityError("BREACHED_PASSWORD_SERVICE_UNAVAILABLE",503);}
++    if(breached)throw new IdentityError("PASSWORD_BREACHED",400);
+ 
+     const hashes=await this.repo.currentAndHistory(row.user_id,policy.historyCount);
+     if(await this.passwords.usedPreviously(newPassword,hashes))
+-      throw new Error("PASSWORD_REUSE");
++      throw new IdentityError("PASSWORD_REUSE",400);
+ 
+     const h=await this.passwords.hash(newPassword,policy);
+ 
+-    const r=await this.pool.query(
+-      `SELECT warehouse_identity.consume_password_reset_v5($1,$2,$3,$4,$5,$6,$7,$8) AS result`,
+-      [requestId,keyedHash(claimToken,this.env.SESSION_HASH_KEY),
+-       keyedHash(browserBinding,this.env.SESSION_HASH_KEY),
+-       h.hash,h.parameters,ids.requestId,ids.correlationId,policy.policyId]
+-    );
+-    return r.rows[0]?.result;
++    // One transaction: supplemental-proof guard -> v5 consume -> IAM session epoch (+ security audit event).
++    // Any failure rolls back all three. The slow checks above (HIBP, history, Argon2id) stay outside it.
++    return tx(this.pool,async c=>{
++      const g=await c.query(
++        `SELECT * FROM warehouse_identity.recovery_reset_guard_v15($1,$2)`,
++        [requestId,proofId]
++      );
++      if(g.rows[0]?.user_id!==row.user_id)throw new Error("RESET_SUBJECT_MISMATCH");
++      const r=await c.query(
++        `SELECT warehouse_identity.consume_password_reset_v5($1,$2,$3,$4,$5,$6,$7,$8) AS result`,
++        [requestId,keyedHash(claimToken,this.env.SESSION_HASH_KEY),
++         keyedHash(browserBinding,this.env.SESSION_HASH_KEY),
++         h.hash,h.parameters,ids.requestId,ids.correlationId,policy.policyId]
++      );
++      if(r.rows[0]?.result!=="CONSUMED")throw new Error("RESET_NOT_CONSUMED");
++      await c.query(
++        `SELECT warehouse_identity.iam_advance_session_epoch_v15($1,'PASSWORD_RESET',$2,$3) AS epoch`,
++        [row.user_id,ids.requestId,ids.correlationId]
++      );
++      return r.rows[0].result;
++    });
+   }
+ }
+--- a/src/express/registerIdentityRoutes.ts
++++ b/src/express/registerIdentityRoutes.ts
+@@ -229,9 +229,10 @@
+     const b=z.object({
+       requestId:U,claimToken:z.string().min(16).max(1024),
+       browserBinding:z.string().min(16).max(1024),
+-      newPassword:z.string().min(1).max(1024)
++      newPassword:z.string().min(1).max(1024),
++      proofId:U.optional()
+     }).parse(req.body);
+-    const result=await guarded(req,d,'PASSWORD_RESET_CONSUME',()=>d.resets.consume(b.requestId,b.claimToken,b.browserBinding,b.newPassword,ids(req)));
++    const result=await guarded(req,d,'PASSWORD_RESET_CONSUME',()=>d.resets.consume(b.requestId,b.claimToken,b.browserBinding,b.newPassword,ids(req),b.proofId??null));
+     return res.json({result});
+   });
+ 
