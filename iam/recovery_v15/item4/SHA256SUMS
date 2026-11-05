@@ -1,0 +1,6 @@
+caa295ba5e78391bf55a52a3d538e78f14b5d2b93e5a0c265b52bb1aca53321a  ./README.md
+81cc570efc2bdda0d8d0a358f270d073800799dba2febbc43a8f22f38c78f678  ./STAGING_6.1B_SHA256.txt
+03d24610f7fb2ca89720710464737de6c9eb07a3a7820c950259bbe39af510a5  ./database/622_iam_session_epoch_events.rollback.sql
+1cdd80254b6c4ce1246aee16bf740194b7a2bfcf8615527b46fa5a056f6de170  ./database/622_iam_session_epoch_events.sql
+a0264166ab8dae69590d9e67ea8dc46ae9a52093df426b25955dbaa0c5847c70  ./loginv2-6.1B-item4.patch
+a8a88df22be38cee42ca479a3beec11121b4c25c72f26149d1d51cfacbc022ab  ./tools/stg_item4.sh
