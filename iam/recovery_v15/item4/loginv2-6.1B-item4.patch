@@ -1,0 +1,136 @@
+--- a/src/config/env.ts
++++ b/src/config/env.ts
+@@ -8,7 +8,8 @@
+  TRUSTED_PROXY_CIDRS:z.string().default("127.0.0.1/32"),COOKIE_SECURE:bool.default(true),SESSION_ABSOLUTE_MINUTES:z.literal("480").transform(Number).or(z.literal(480)),
+  SESSION_IDLE_MINUTES:z.literal("30").transform(Number).or(z.literal(30)),TOUCH_COALESCE_SECONDS:z.coerce.number().int().min(30).max(300).default(90),
+  LOGIN_WINDOW_SECONDS:z.coerce.number().int().min(60).max(86400).default(900),HIBP_API_URL:z.string().url().default("https://api.pwnedpasswords.com/range"),
+- LOG_LEVEL:z.string().default("info")
++ LOG_LEVEL:z.string().default("info"),
++ INTERNAL_IAM_API_SECRET:z.string().min(32).optional(),INTERNAL_IAM_API_PORT:z.coerce.number().int().min(1).max(65535).optional()
+ });
+ export type IdentityEnv=z.infer<typeof schema>;
+ export const loadEnv=(source:NodeJS.ProcessEnv=process.env):IdentityEnv=>schema.parse(source);
+--- a/src/express/integration.ts
++++ b/src/express/integration.ts
+@@ -16,6 +16,7 @@
+ import {BreakGlassIntegrationService} from '../services/breakGlassIntegrationService';
+ import {IdentityAdminService} from './identityAdmin/identityAdminService';
+ import {identityAdminRoutes} from './identityAdmin/identityAdminRoutes';
++import {startInternalIamApi} from './internalIamApi';
+ import type {IdentityEnv} from '../config/env';
+ import crypto from 'node:crypto';
+ 
+@@ -41,6 +42,11 @@
+ 
+   await auth.startup();
+ 
++  // Internal IAM verification API for EOC: own 127.0.0.1 listener, only when configured.
++  const internalIam=d.env.INTERNAL_IAM_API_SECRET&&d.env.INTERNAL_IAM_API_PORT
++    ?startInternalIamApi(d.pool,{host:'127.0.0.1',port:d.env.INTERNAL_IAM_API_PORT,secret:d.env.INTERNAL_IAM_API_SECRET})
++    :null;
++
+   const common=[
+     requestIds,
+     securityHeaders,
+@@ -162,7 +168,7 @@
+   });
+ 
+   return {
+-    close:async()=>{await limits.close();},
++    close:async()=>{await limits.close();await internalIam?.close();},
+     metrics:()=>readiness.metricsText()
+   };
+ }
+--- a/src/express/registerIdentityRoutes.ts
++++ b/src/express/registerIdentityRoutes.ts
+@@ -248,6 +248,18 @@
+     return res.status(204).end();
+   });
+ 
++  // Every Warehouse session of the caller's user + the IAM session epoch (ends EOC sessions too).
++  r.post('/sign-out-everywhere',async(req,res)=>{
++    const token=cookie(req,'__Host-tcds_session');
++    if(!token)return res.status(401).json({error:{code:'SESSION_INVALID'}});
++    const q=await d.pool.query(
++      'SELECT warehouse_identity.iam_sign_out_everywhere_v15($1,$2,$3) AS revoked',
++      [H(token,d.sessionHashKey),ids(req).requestId,ids(req).correlationId]
++    );
++    clearCookies(res);
++    return res.json({revokedSessions:Number(q.rows[0]?.revoked??0)});
++  });
++
+   return r;
+ }
+ 
+--- /dev/null
++++ b/src/express/internalIamApi.ts
+@@ -0,0 +1,69 @@
++import http from 'node:http';
++import crypto from 'node:crypto';
++import type {Pool} from 'pg';
++
++// Internal IAM verification API for EOC (Anthony decision 4). Own listener on 127.0.0.1, never under the public
++// /api/v1/auth prefix. EOC calls it on every protected request and treats anything but a verified 200 with a
++// matching epoch and userActive=true as signed out.
++//   POST /internal/v1/iam/session-status  {"userId":"<uuid>"}
++// Request auth (same scheme as 6.1B -> 6.1C verifier calls), secret = INTERNAL_IAM_API_SECRET:
++//   x-tcds-workload: eoc, x-tcds-timestamp (ms, +-60 s), x-tcds-nonce (uuid, single use), x-tcds-body-sha256 (hex),
++//   x-request-id (uuid), x-tcds-request-signature = base64url HMAC-SHA256(`${ts}.${nonce}.${bodySha256}.${requestId}`)
++// Response auth: x-tcds-response-signature = base64url HMAC-SHA256(`${requestId}.${sha256(responseBody)}`).
++const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++const MAX_SKEW_MS=60_000;
++const MAX_BODY=4096;
++const MAX_NONCES=100_000;
++
++export type InternalIamApiConfig={host:string;port:number;secret:string};
++
++export function startInternalIamApi(pool:Pool,c:InternalIamApiConfig){
++  const seen=new Map<string,number>();
++  const sha=(s:string)=>crypto.createHash('sha256').update(s,'utf8').digest('hex');
++  const sign=(s:string)=>crypto.createHmac('sha256',c.secret).update(s,'utf8').digest('base64url');
++  const same=(a:string,b:string)=>a.length===b.length&&crypto.timingSafeEqual(Buffer.from(a),Buffer.from(b));
++  const header=(req:http.IncomingMessage,n:string)=>{const v=req.headers[n];return typeof v==='string'?v:'';};
++
++  const server=http.createServer((req,res)=>{
++    const send=(status:number,body:object,requestId?:string)=>{
++      if(res.headersSent)return;
++      const raw=JSON.stringify(body);
++      const h:Record<string,string>={'content-type':'application/json','cache-control':'no-store'};
++      if(requestId)h['x-tcds-response-signature']=sign(`${requestId}.${sha(raw)}`);
++      res.writeHead(status,h).end(raw);
++    };
++    if(req.method!=='POST'||req.url!=='/internal/v1/iam/session-status')return send(404,{error:{code:'NOT_FOUND'}});
++    let raw='',size=0,tooBig=false;
++    req.setEncoding('utf8');
++    req.on('data',(x:string)=>{
++      size+=Buffer.byteLength(x);
++      if(size>MAX_BODY){tooBig=true;send(413,{error:{code:'REQUEST_TOO_LARGE'}});req.destroy();}
++      else raw+=x;
++    });
++    req.on('end',async()=>{
++      if(tooBig)return;
++      const now=Date.now(),ts=header(req,'x-tcds-timestamp'),nonce=header(req,'x-tcds-nonce'),
++        requestId=header(req,'x-request-id'),hash=header(req,'x-tcds-body-sha256'),sig=header(req,'x-tcds-request-signature');
++      if(header(req,'x-tcds-workload')!=='eoc'||!UUID.test(requestId)||!UUID.test(nonce)||!/^\d{13}$/.test(ts)
++         ||Math.abs(now-Number(ts))>MAX_SKEW_MS||hash!==sha(raw)||!same(sig,sign(`${ts}.${nonce}.${hash}.${requestId}`)))
++        return send(401,{error:{code:'REQUEST_SIGNATURE_INVALID'}});
++      for(const [k,t] of seen)if(t<now-2*MAX_SKEW_MS)seen.delete(k);
++      if(seen.has(nonce))return send(401,{error:{code:'REQUEST_REPLAYED'}});
++      if(seen.size>=MAX_NONCES)return send(503,{error:{code:'IAM_STATUS_UNAVAILABLE'}},requestId);
++      seen.set(nonce,now);
++      let userId:unknown;
++      try{userId=JSON.parse(raw)?.userId;}catch{userId=undefined;}
++      if(typeof userId!=='string'||!UUID.test(userId))return send(400,{error:{code:'REQUEST_INVALID'}},requestId);
++      try{
++        const r=await pool.query('SELECT user_active,epoch FROM warehouse_identity.iam_session_epoch_status_v15($1)',[userId]);
++        send(200,{contractVersion:'1.0',requestId,userId,userActive:r.rows[0]?.user_active===true,
++                  epoch:Number(r.rows[0]?.epoch??0),checkedAt:new Date().toISOString()},requestId);
++      }catch{
++        send(503,{error:{code:'IAM_STATUS_UNAVAILABLE'}},requestId);
++      }
++    });
++  });
++  server.on('error',e=>console.error(JSON.stringify({level:'error',msg:'internal iam api error',error:e.message})));
++  server.listen(c.port,c.host,()=>console.log(JSON.stringify({level:'info',msg:'internal iam api listening',port:c.port})));
++  return {close:()=>new Promise<void>(resolve=>server.close(()=>resolve()))};
++}
