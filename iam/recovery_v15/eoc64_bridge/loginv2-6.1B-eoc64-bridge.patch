@@ -1,0 +1,120 @@
+--- a/src/config/env.ts
++++ b/src/config/env.ts
+@@ -9,7 +9,8 @@
+  SESSION_IDLE_MINUTES:z.literal("30").transform(Number).or(z.literal(30)),TOUCH_COALESCE_SECONDS:z.coerce.number().int().min(30).max(300).default(90),
+  LOGIN_WINDOW_SECONDS:z.coerce.number().int().min(60).max(86400).default(900),HIBP_API_URL:z.string().url().default("https://api.pwnedpasswords.com/range"),
+  LOG_LEVEL:z.string().default("info"),
+- INTERNAL_IAM_API_SECRET:z.string().min(32).optional(),INTERNAL_IAM_API_PORT:z.coerce.number().int().min(1).max(65535).optional()
++ INTERNAL_IAM_API_SECRET:z.string().min(32).optional(),INTERNAL_IAM_API_PORT:z.coerce.number().int().min(1).max(65535).optional(),
++ EOC_IAM_SERVICE_TOKEN:z.string().min(32).optional()
+ });
+ export type IdentityEnv=z.infer<typeof schema>;
+ export const loadEnv=(source:NodeJS.ProcessEnv=process.env):IdentityEnv=>schema.parse(source);
+--- a/src/express/integration.ts
++++ b/src/express/integration.ts
+@@ -44,7 +44,7 @@
+ 
+   // Internal IAM verification API for EOC: own 127.0.0.1 listener, only when configured.
+   const internalIam=d.env.INTERNAL_IAM_API_SECRET&&d.env.INTERNAL_IAM_API_PORT
+-    ?startInternalIamApi(d.pool,{host:'127.0.0.1',port:d.env.INTERNAL_IAM_API_PORT,secret:d.env.INTERNAL_IAM_API_SECRET})
++    ?startInternalIamApi(d.pool,{host:'127.0.0.1',port:d.env.INTERNAL_IAM_API_PORT,secret:d.env.INTERNAL_IAM_API_SECRET,eocBridgeSecret:d.env.EOC_IAM_SERVICE_TOKEN})
+     :null;
+ 
+   const common=[
+--- a/src/express/internalIamApi.ts
++++ b/src/express/internalIamApi.ts
+@@ -10,12 +10,22 @@
+ //   x-tcds-workload: eoc, x-tcds-timestamp (ms, +-60 s), x-tcds-nonce (uuid, single use), x-tcds-body-sha256 (hex),
+ //   x-request-id (uuid), x-tcds-request-signature = base64url HMAC-SHA256(`${ts}.${nonce}.${bodySha256}.${requestId}`)
+ // Response auth: x-tcds-response-signature = base64url HMAC-SHA256(`${requestId}.${sha256(responseBody)}`).
++//
++// EOC 6.4 V1.2 IAM bridge (Anthony's authorityRouter contract, ported; only when EOC_IAM_SERVICE_TOKEN is set).
++// Reached from the acquisition server only through the private mTLS proxy in front of this listener.
++//   GET  /internal/v1/iam/eoc/ready
++//   GET  /internal/v1/iam/eoc/subject/<uuid>
++//   POST /internal/v1/iam/eoc/federation/resolve  {"issuer":"https://...","providerSubject":"..."}
++// Request auth (EOC authorityClient.mjs), secret = EOC_IAM_SERVICE_TOKEN: x-eoc-workload-timestamp (unix s, +-60 s),
++//   x-eoc-workload-nonce (uuid, single use across workers - admitted in the database), x-eoc-workload-signature =
++//   hex HMAC-SHA256(method \n path \n timestamp \n nonce \n sha256hex(body)). Every disclosure is audited (623).
+ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ const MAX_SKEW_MS=60_000;
+ const MAX_BODY=4096;
+ const MAX_NONCES=100_000;
++const BRIDGE='/internal/v1/iam/eoc/';
+ 
+-export type InternalIamApiConfig={host:string;port:number;secret:string};
++export type InternalIamApiConfig={host:string;port:number;secret:string;eocBridgeSecret?:string};
+ 
+ export function startInternalIamApi(pool:Pool,c:InternalIamApiConfig){
+   const seen=new Map<string,number>();
+@@ -32,7 +42,9 @@
+       if(requestId)h['x-tcds-response-signature']=sign(`${requestId}.${sha(raw)}`);
+       res.writeHead(status,h).end(raw);
+     };
+-    if(req.method!=='POST'||req.url!=='/internal/v1/iam/session-status')return send(404,{error:{code:'NOT_FOUND'}});
++    const url=req.url??'';
++    const bridge=!!c.eocBridgeSecret&&url.startsWith(BRIDGE);
++    if(!bridge&&(req.method!=='POST'||url!=='/internal/v1/iam/session-status'))return send(404,{error:{code:'NOT_FOUND'}});
+     let raw='',size=0,tooBig=false;
+     req.setEncoding('utf8');
+     req.on('data',(x:string)=>{
+@@ -42,6 +54,7 @@
+     });
+     req.on('end',async()=>{
+       if(tooBig)return;
++      if(bridge)return eocBridge(req,url,raw,send);
+       const now=Date.now(),ts=header(req,'x-tcds-timestamp'),nonce=header(req,'x-tcds-nonce'),
+         requestId=header(req,'x-request-id'),hash=header(req,'x-tcds-body-sha256'),sig=header(req,'x-tcds-request-signature');
+       if(header(req,'x-tcds-workload')!=='eoc'||!UUID.test(requestId)||!UUID.test(nonce)||!/^\d{13}$/.test(ts)
+@@ -63,7 +76,50 @@
+       }
+     });
+   });
++
++  // Anthony's bridge contract: error bodies are {error:'CODE'} and responses are not signed (mTLS carries them).
++  async function eocBridge(req:http.IncomingMessage,url:string,raw:string,send:(s:number,b:object)=>void){
++    const key=c.eocBridgeSecret as string,method=req.method??'';
++    const ts=header(req,'x-eoc-workload-timestamp'),nonce=header(req,'x-eoc-workload-nonce'),sig=header(req,'x-eoc-workload-signature');
++    if(!/^\d{10}$/.test(ts)||Math.abs(Date.now()/1000-Number(ts))>MAX_SKEW_MS/1000||!UUID.test(nonce)||!/^[a-f0-9]{64}$/.test(sig)
++       ||(method==='GET'&&raw!=='')
++       ||!same(sig,crypto.createHmac('sha256',key).update([method,url,ts,nonce,sha(raw)].join('\n'),'utf8').digest('hex')))
++      return send(401,{error:'UNAUTHORIZED'});
++    const rid=header(req,'x-request-id'),requestId=UUID.test(rid)?rid:null;
++    try{
++      const a=await pool.query('SELECT warehouse_identity.eoc_bridge_admit_nonce_v623($1) AS ok',[sha(nonce)]);
++      if(a.rows[0]?.ok!==true)return send(401,{error:'REPLAY_REJECTED'});
++    }catch{return send(503,{error:'IAM_BRIDGE_UNAVAILABLE'});}
++    const subject=url.slice(BRIDGE.length).match(/^subject\/([0-9a-f-]{36})$/i);
++    try{
++      if(method==='GET'&&url===BRIDGE+'ready'){
++        await pool.query('SELECT warehouse_identity.eoc_bridge_ready_v623($1)',[requestId]);
++        return send(200,{ready:true,epochAuthority:true,federationAuthority:true});
++      }
++      if(method==='GET'&&subject){
++        if(!UUID.test(subject[1]))return send(400,{error:'BAD_SUBJECT'});
++        const r=await pool.query('SELECT warehouse_identity.eoc_subject_snapshot_v623($1,$2) AS snapshot',[subject[1],requestId]);
++        const snap=r.rows[0]?.snapshot;
++        return snap?send(200,{...snap,epoch:Number(snap.epoch)}):send(404,{error:'UNKNOWN_SUBJECT'});
++      }
++      if(method==='POST'&&url===BRIDGE+'federation/resolve'){
++        let b:{issuer?:unknown;providerSubject?:unknown}={};
++        try{b=JSON.parse(raw)??{};}catch{b={};}
++        const {issuer,providerSubject}=b;
++        if(typeof issuer!=='string'||!issuer.startsWith('https://')||issuer.length>500
++           ||typeof providerSubject!=='string'||providerSubject.length<1||providerSubject.length>255)
++          return send(400,{error:'BAD_IDENTITY'});
++        const r=await pool.query('SELECT warehouse_identity.eoc_resolve_federation_v623($1,$2,$3) AS user_id',[issuer,sha(providerSubject),requestId]);
++        const userId=r.rows[0]?.user_id;
++        return userId?send(200,{verified:true,userId}):send(403,{error:'FEDERATION_BINDING_DENIED'});
++      }
++      return send(404,{error:'NOT_FOUND'});
++    }catch{
++      return send(503,{error:'IAM_AUTHORITY_UNAVAILABLE'});
++    }
++  }
++
+   server.on('error',e=>console.error(JSON.stringify({level:'error',msg:'internal iam api error',error:e.message})));
+-  server.listen(c.port,c.host,()=>console.log(JSON.stringify({level:'info',msg:'internal iam api listening',port:c.port})));
++  server.listen(c.port,c.host,()=>console.log(JSON.stringify({level:'info',msg:'internal iam api listening',port:c.port,eocBridge:!!c.eocBridgeSecret})));
+   return {close:()=>new Promise<void>(resolve=>server.close(()=>resolve()))};
+ }

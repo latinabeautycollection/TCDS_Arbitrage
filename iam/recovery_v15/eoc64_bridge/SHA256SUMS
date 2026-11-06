@@ -1,0 +1,7 @@
+f33e9c957e35b6bc25360fab1f4d0db5be16a617efe78d0fa264353a82a9d699  ./README.md
+e19ca0e9d0c133bf5048b94d1f559e737c6d3e7a4d09da68783d4253fef21628  ./STAGING_6.1B_SHA256.txt
+48d776d89e5cec780e8beeb0a90c07da517d0155a8339effa0ef10f5a3e0df29  ./database/623_eoc_iam_bridge.rollback.sql
+68dcf7cec5ac092feeca90a97f296f6eb6a0bfebd67f1eeabd1d80b650e728b4  ./database/623_eoc_iam_bridge.sql
+4293bc97939a1ccef6f22c24284d65ce80e939b0ea166b050eab4fcd9add2311  ./loginv2-6.1B-eoc64-bridge.patch
+804ece236e0be84def7defd515f81a47d0580cca3d7fcf6a3e77ecfcc9d2cd50  ./tools/eoc64_policy.mjs
+123d6a3a164e48a3f9abb81e93861e6b15f6c2f2e7882df6a7ae665813697359  ./tools/stg_eoc64.sh
