@@ -126,3 +126,31 @@ envelope is a ceiling and never a source of capability.
 **Test added.** The four cases above. No production file was touched.
 **Certification result.** 4/4 pass; both checklist items are now PASS rather than
 REVIEW.
+
+---
+
+## CR-6.2C-07 — Pack/Ship source and outbound capture contexts
+
+**Finding.** The Milestone 2A Pack/Ship pilot scans a source (a tote or pack stage) and an
+outbound staging location. 6.2C had no capture context for either, and neither scan may
+borrow `PACK_PACKAGE` or `PACK_ITEM`.
+**Root cause.** The delivered contract covered the packing item, package and tracking
+label only.
+**Affected files.** `src/lib/scanning/policy/WarehouseCaptureContext.ts`,
+`src/lib/scanning/policy/capturePolicyEnvelopeRegistry.ts`,
+`scripts/scandit/generate-domain6-2c-policy-manifest.mjs`,
+`tests/scanning-6.2c/policyResolution.test.ts`,
+`tests/scanning-6.2c/packShipContexts.test.ts` (new).
+**Fix.** `PACK_SOURCE` and `PACK_OUTBOUND_LOCATION` added, each with its own envelope:
+Code 128 and QR, automatic selection, the tight scan area, and the standard bounds (scan
+area 0.45-0.90 by 0.25-0.60, capture timeout 5-120 seconds with a 45 second default, sound
+and vibration allowed as a ceiling). These match `PICK_DESTINATION`. There is no
+per-context duplicate filter: it comes from the Warehouse Control snapshot for every
+context, so both inherit it. The registry version is now 6.2C.3. The 16 existing envelopes
+are unchanged.
+**Test added.** `packShipContexts`: ten cases for each context and one that keeps the
+manifest generator on the registry's version.
+**Certification result.** 6.2C 52/52, within a full 6.2A + 6.2B + 6.2C + 6.2D chain that
+passes. Manifest SHA-256
+`6da16287ff37c14bf88c8f4d02e1ea607e23a7263745bf3226b5caf77e40a2b3`, reproducible, 11
+policy sources, registry version 6.2C.3.
