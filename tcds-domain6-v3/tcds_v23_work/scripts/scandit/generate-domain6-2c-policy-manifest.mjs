@@ -46,7 +46,7 @@ walk(sourceRoot);
 const manifest = {
   slice: "6.2C",
   registryVersion:
-    "6.2C.2",
+    "6.2C.3",
   authority:
     "warehouse_control/PostgreSQL",
   executionOwner:
