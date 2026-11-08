@@ -4,7 +4,7 @@ import {
   scanLocation as storageScanLocation,
 } from "../../../../features/storage/services/storageApi";
 import { pickingApi } from "../../../../features/picking/services/pickingApi";
-import { packShipApi } from "../../../../features/packShip/services/packShipApi";
+import { packShipApi, type OperationContext } from "../../../../features/packShip/services/packShipApi";
 import { resolveInventoryScan } from "../../../../features/inventory/services/inventoryApi";
 import { returnsApi } from "../../../../features/returns/services/returnsApi";
 import type { WorkflowPortSet } from "./WorkflowPorts";
@@ -23,15 +23,20 @@ function operationKey(op: OperationRequestContext): Uuid {
   return op.clientOperationId as Uuid;
 }
 
+/** The Pack/Ship scan calls take the whole operation: its key and its correlation id. */
+function operationContext(op: OperationRequestContext): OperationContext {
+  return { clientOperationId: operationKey(op), correlationId: op.correlationId };
+}
+
 /**
  * Binds the 6.2D ports to the six existing authoritative API helpers. This module makes
  * no HTTP call of its own: there is one HTTP path, one error contract per helper, and one
  * retry model, all of them the helpers'.
  *
- * Operation context. Every port receives the operation. The storage scan calls already
- * accept an idempotency key, so they receive the stable operation identity now. The other
- * helpers still generate their own identity per call until they are extended to accept
- * the operation; the parameter is in place so that change is a one-line edit here.
+ * Operation context. Every port receives the operation. The storage scan calls and the
+ * four Pack/Ship scan calls accept it, so they receive the stable operation identity now.
+ * The other helpers still generate their own identity per call until they are extended to
+ * accept the operation; the parameter is in place so that change is a one-line edit here.
  */
 export const productionWorkflowPorts: WorkflowPortSet = {
   receiving: {
@@ -55,11 +60,14 @@ export const productionWorkflowPorts: WorkflowPortSet = {
   },
 
   packShip: {
-    scanSource: (taskId, barcode, rowVersion) => packShipApi.scanSource(taskId, barcode, rowVersion),
-    scanItem: (taskId, barcode, rowVersion) => packShipApi.scanItem(taskId, barcode, rowVersion),
-    verifyLabel: (shipmentId, trackingBarcode, packageBarcode) =>
-      packShipApi.verifyLabel(shipmentId, trackingBarcode, packageBarcode),
-    stageOutbound: (shipmentId, locationBarcode) => packShipApi.stageOutbound(shipmentId, locationBarcode),
+    scanSource: async (taskId, barcode, rowVersion, op) =>
+      packShipApi.scanSource(taskId, barcode, rowVersion, operationContext(op)),
+    scanItem: async (taskId, barcode, rowVersion, op) =>
+      packShipApi.scanItem(taskId, barcode, rowVersion, operationContext(op)),
+    verifyLabel: async (shipmentId, trackingBarcode, packageBarcode, op) =>
+      packShipApi.verifyLabel(shipmentId, trackingBarcode, packageBarcode, operationContext(op)),
+    stageOutbound: async (shipmentId, locationBarcode, op) =>
+      packShipApi.stageOutbound(shipmentId, locationBarcode, operationContext(op)),
   },
 
   inventory: {
