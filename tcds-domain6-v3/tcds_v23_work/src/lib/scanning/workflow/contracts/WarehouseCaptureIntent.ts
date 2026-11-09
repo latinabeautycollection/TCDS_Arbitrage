@@ -8,7 +8,9 @@ export type WarehouseCaptureIntentType =
   | "IMEI"
   | "MAC_ADDRESS"
   | "TRACKING_NUMBER"
-  | "TOTE_ID";
+  | "TOTE_ID"
+  | "SOURCE_ID"
+  | "OUTBOUND_LOCATION";
 
 export interface WarehouseCaptureIntent {
   intent: WarehouseCaptureIntentType;
