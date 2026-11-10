@@ -27,6 +27,9 @@ check that proves it.
 | This slice adds no SQL | — | boundary check over every changed path |
 | Certification fails closed without a valid baseline | `verify-domain6-2c-boundary.mjs` | `policyBoundaryGate`: absent baseline fails |
 | The policy manifest describes the policy sources exactly | `generate-domain6-2c-policy-manifest.mjs` | generated twice byte-identically and matched against 11 sources in the workflow |
+| `PACK_SOURCE` and `PACK_OUTBOUND_LOCATION` are explicit contexts with their own envelopes | `WarehouseCaptureContext.ts`, `capturePolicyEnvelopeRegistry.ts` | `packShipContexts`: each is registered, and neither allows more than Code 128 and QR |
+| Duplicate filtering comes from the snapshot for every context | `capturePolicyResolver.ts` | `packShipContexts`: 1500 ms becomes 1.5 s in both new contexts |
+| The policy manifest records the registry's version | `generate-domain6-2c-policy-manifest.mjs` | `packShipContexts`: the generator carries the registry version |
 
 One rule is carried by code review alone: the profile timestamp guard has no dedicated
 test case. Every other rule above is proved by an automated check that runs inside

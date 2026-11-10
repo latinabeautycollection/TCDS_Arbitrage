@@ -67,7 +67,7 @@ describe(
           policySource:
             "6.2C_VALIDATED_POLICY",
           registryVersion:
-            "6.2C.2",
+            "6.2C.3",
           profileId:
             "RETURN_SERIAL",
           profileRevision: 1,

@@ -6,7 +6,7 @@ import type {
 } from "./WarehouseCaptureContext";
 
 export const DOMAIN6_2C_POLICY_REGISTRY_VERSION =
-  "6.2C.2";
+  "6.2C.3";
 
 const STANDARD_AREA = Object.freeze({
   widthFraction: 0.70,
@@ -160,6 +160,14 @@ const REGISTRY = {
       "Center one destination label in the scan area.",
     ),
   ),
+  PACK_SOURCE: envelope(
+    "PACK_SOURCE",
+    base(
+      LOCATION_SYMBOLOGIES,
+      TIGHT_AREA,
+      "Center one tote or pack stage label in the scan area.",
+    ),
+  ),
   PACK_ITEM: envelope(
     "PACK_ITEM",
     base(
@@ -182,6 +190,14 @@ const REGISTRY = {
       PACKAGE_SYMBOLOGIES,
       WIDE_AREA,
       "Center one tracking barcode in the scan area.",
+    ),
+  ),
+  PACK_OUTBOUND_LOCATION: envelope(
+    "PACK_OUTBOUND_LOCATION",
+    base(
+      LOCATION_SYMBOLOGIES,
+      TIGHT_AREA,
+      "Center one outbound location label in the scan area.",
     ),
   ),
   RETURN_PACKAGE: envelope(
