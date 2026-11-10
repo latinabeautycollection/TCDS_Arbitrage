@@ -60,8 +60,11 @@ export function captureContextFor(
       if (intent === "ITEM_ID") return "PICK_ITEM";
       return intent === "TOTE_ID" ? "PICK_DESTINATION" : null;
     case "PACKING":
+      if (workflowStep === "PACK_SOURCE") return intent === "SOURCE_ID" ? "PACK_SOURCE" : null;
       if (workflowStep === "PACK_ITEM") return "PACK_ITEM";
       return workflowStep === "PACK_VERIFY_LABEL" ? "TRACKING_LABEL" : null;
+    case "OUTBOUND":
+      return intent === "OUTBOUND_LOCATION" ? "PACK_OUTBOUND_LOCATION" : null;
     case "INVENTORY":
       return "INVENTORY_LOOKUP";
     case "RETURNS":
@@ -69,7 +72,6 @@ export function captureContextFor(
       if (intent === "ITEM_ID") return "RETURN_ITEM";
       return serial ? "RETURN_SERIAL" : null;
     default:
-      // The Pack/Ship source scan and the outbound stage have no certified context yet.
       return null;
   }
 }

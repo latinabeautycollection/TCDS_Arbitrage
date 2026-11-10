@@ -125,10 +125,10 @@ function packShipContext(workflow: string, workflowStep: string, intent: string)
 }
 
 const coordinatorSteps: Array<[string, WorkflowScanCoordinatorContext, string, string]> = [
-  ["source", packShipContext("PACKING", "PACK_SOURCE", "TOTE_ID"), "TOTE-7", "/scan-source"],
+  ["source", packShipContext("PACKING", "PACK_SOURCE", "SOURCE_ID"), "TOTE-7", "/scan-source"],
   ["item", packShipContext("PACKING", "PACK_ITEM", "ITEM_ID"), "TCDS-ITEM-1", "/scan-item"],
   ["tracking label", packShipContext("PACKING", "PACK_VERIFY_LABEL", "TRACKING_NUMBER"), "1Z999AA10123456784", "/label/verify"],
-  ["outbound location", packShipContext("OUTBOUND", "STAGE", "LOCATION_ID"), "OUT-A1", "/outbound-stage"],
+  ["outbound location", packShipContext("OUTBOUND", "STAGE", "OUTBOUND_LOCATION"), "OUT-A1", "/outbound-stage"],
 ];
 
 describe("Pack/Ship retry through the 6.2D coordinator", () => {
