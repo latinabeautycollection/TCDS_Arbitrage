@@ -9,6 +9,7 @@ import type {
 } from "../../../../features/receiving/types/receivingTypes";
 import type { PickTask, ScanResult } from "../../../../features/picking/types/pickingTypes";
 import type { ReturnType as ReturnClassification } from "../../../../features/returns/types/returnTypes";
+import type { PackShipLabelPairEvidence, PhysicalTrackingEvidence } from "../../../../features/packShip/scanning/packShipLabelEvidence";
 import { classifyWorkflowFailure } from "./workflowFailure";
 
 export interface WorkflowAdapterContext {
@@ -22,7 +23,9 @@ export interface WorkflowAdapterContext {
   /** Set when resuming a receiving scan whose candidate was already created. */
   intakeCandidateId?: string;
   shipmentId?: string;
-  packageBarcode?: string;
+  /** First physical half of the final two-scan tracking -> package proof. */
+  trackingBarcode?: string;
+  trackingEvidence?: PhysicalTrackingEvidence;
   returnType?: ReturnClassification;
 }
 
@@ -69,21 +72,75 @@ export class ProductionWorkflowAdapter {
       }
 
       case "PACKING":
-        if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
         if (envelope.workflowStep === "PACK_SOURCE") {
+          if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
+          if (intent !== "SOURCE_ID") return blocked("INVALID_CAPTURE_INTENT");
           return accepted(await this.ports.packShip.scanSource(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
+
         if (envelope.workflowStep === "PACK_ITEM") {
+          if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
+          if (intent !== "ITEM_ID") return blocked("INVALID_CAPTURE_INTENT");
           return accepted(await this.ports.packShip.scanItem(envelope.workflowEntityId, raw, context.rowVersion, op));
         }
-        if (envelope.workflowStep === "PACK_VERIFY_LABEL") {
-          if (!context.shipmentId || !context.packageBarcode) return blocked("LABEL_CONTEXT_REQUIRED");
-          return accepted(await this.ports.packShip.verifyLabel(context.shipmentId, raw, context.packageBarcode, op));
+
+        // First physical half of label verification. This records no business mutation.
+        // The screen holds this transient observation until the physical package barcode
+        // is captured under the PACK_PACKAGE context.
+        if (envelope.workflowStep === "PACK_TRACKING_LABEL") {
+          if (intent !== "TRACKING_NUMBER") return blocked("INVALID_CAPTURE_INTENT");
+          if (!context.shipmentId) return blocked("SHIPMENT_REQUIRED");
+          return {
+            outcome: "ACCEPTED",
+            reasonCode: "TRACKING_SCAN_CAPTURED",
+            nextAction: "PAUSE_FOR_DOMAIN_STEP",
+            result: {
+              trackingBarcode: raw,
+              labelPairId: envelope.clientOperationId,
+              observationId: envelope.observation.observationId,
+              capturedAt: envelope.observation.capturedAt,
+              provider: envelope.observation.provider,
+              symbology: envelope.observation.symbology,
+              trackingClientOperationId: envelope.clientOperationId,
+              trackingCorrelationId: envelope.correlationId,
+            },
+          };
         }
+
+        // Second physical half. Only now is the authoritative verifyLabel writer called.
+        if (envelope.workflowStep === "PACK_PACKAGE") {
+          if (intent !== "PACKAGE_ID") return blocked("INVALID_CAPTURE_INTENT");
+          if (!context.shipmentId || !context.trackingBarcode || !context.trackingEvidence) {
+            return blocked("LABEL_CONTEXT_REQUIRED");
+          }
+          const evidence: PackShipLabelPairEvidence = {
+            labelPairId: context.trackingEvidence.labelPairId,
+            tracking: context.trackingEvidence,
+            package: {
+              observationId: envelope.observation.observationId,
+              capturedAt: envelope.observation.capturedAt,
+              provider: envelope.observation.provider,
+              symbology: envelope.observation.symbology,
+              packageClientOperationId: envelope.clientOperationId,
+              packageCorrelationId: envelope.correlationId,
+            },
+          };
+          return accepted(
+            await this.ports.packShip.verifyLabel(
+              context.shipmentId,
+              context.trackingBarcode,
+              raw,
+              op,
+              evidence,
+            ),
+          );
+        }
+
         return blocked("INVALID_WORKFLOW_STEP");
 
       case "OUTBOUND":
         if (!context.shipmentId) return blocked("SHIPMENT_REQUIRED");
+        if (intent !== "OUTBOUND_LOCATION") return blocked("INVALID_CAPTURE_INTENT");
         return accepted(await this.ports.packShip.stageOutbound(context.shipmentId, raw, op));
 
       case "INVENTORY":
@@ -181,8 +238,6 @@ function fromVerification(intakeCandidateId: string, verification: IntakeVerific
     case "REJECTED":
       return { outcome: "REJECTED", reasonCode: "CANDIDATE_REJECTED", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
     default:
-      // PENDING or PROCESSING: verification is still running on the server. The existing
-      // Receiving screen follows it through verificationStatus; the scan has done its part.
       return { outcome: "REVIEW_REQUIRED", reasonCode: "VERIFICATION_PENDING", nextAction: "PAUSE_FOR_DOMAIN_STEP", result };
   }
 }

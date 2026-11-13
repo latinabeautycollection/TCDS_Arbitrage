@@ -6,8 +6,8 @@ import { ProductionWorkflowAdapter } from "../../src/lib/scanning/workflow/adapt
 import { WorkflowScanCoordinator, type WorkflowScanCoordinatorContext } from "../../src/lib/scanning/workflow/coordinator/WorkflowScanCoordinator";
 import type { CapturePolicyAuthority } from "../../src/lib/scanning/workflow/policy/CapturePolicyAuthority";
 import type { BarcodeDecodeObservation } from "../../src/lib/scanning/capture/BarcodeDecodeObservation";
+import type { PhysicalTrackingEvidence } from "../../src/features/packShip/scanning/packShipLabelEvidence";
 
-// Every HTTP attempt the helper makes, as the server would see it.
 type Attempt = { url: string; headers: Record<string, string> };
 let attempts: Attempt[] = [];
 let respond: () => Promise<Response>;
@@ -62,7 +62,7 @@ describe("Pack/Ship helper: scanner operation identity", () => {
     expect(attempts[0].headers["X-Request-ID"]).not.toBe(operation.clientOperationId);
   });
 
-  it.each(scannerCalls)("%s without an operation still gets new ids on each call, as the manual screen does today", async (_name, _path, call) => {
+  it.each(scannerCalls)("%s without an operation still gets new ids on each call", async (_name, _path, call) => {
     await call();
     await call();
 
@@ -72,7 +72,7 @@ describe("Pack/Ship helper: scanner operation identity", () => {
     expect(attempts[0].headers["X-Correlation-ID"]).not.toBe(attempts[1].headers["X-Correlation-ID"]);
   });
 
-  it("leaves every other Pack/Ship mutation unchanged in this slice", async () => {
+  it("leaves every other Pack/Ship mutation unchanged in 6.2D", async () => {
     const others = [
       () => packShipApi.claim("T1"),
       () => packShipApi.selectPackage("T1", "BOX-S", undefined, 4),
@@ -113,6 +113,17 @@ const scanner = { start: vi.fn(async () => {}), pause: vi.fn(async () => {}), re
 const scan = (raw: string): BarcodeDecodeObservation =>
   ({ observationId: raw, provider: "test", rawValue: raw, symbology: "CODE128", capturedAt: "2026-11-03T00:00:00.000Z" }) as BarcodeDecodeObservation;
 
+const trackingEvidence: PhysicalTrackingEvidence = {
+  labelPairId: "11111111-1111-4111-8111-111111111111",
+  barcode: "1Z999AA10123456784",
+  observationId: "OBS-TRACK",
+  capturedAt: "2026-11-03T00:00:00.000Z",
+  provider: "test",
+  symbology: "CODE128",
+  trackingClientOperationId: "11111111-1111-4111-8111-111111111111",
+  trackingCorrelationId: "22222222-2222-4222-8222-222222222222",
+};
+
 function packShipContext(workflow: string, workflowStep: string, intent: string): WorkflowScanCoordinatorContext {
   return {
     workflow,
@@ -120,15 +131,21 @@ function packShipContext(workflow: string, workflowStep: string, intent: string)
     workflowStep,
     captureIntent: { intent, mode: "SINGLE", allowedSymbologies: ["CODE128"], allowManualFallback: true },
     captureSource: "SCANDIT_WEB",
-    adapterContext: { rowVersion: 4, shipmentId: "S1", packageBarcode: "PKG-1" },
+    adapterContext: {
+      rowVersion: 4,
+      shipmentId: "S1",
+      ...(workflowStep === "PACK_PACKAGE"
+        ? { trackingBarcode: trackingEvidence.barcode, trackingEvidence }
+        : {}),
+    },
   } as unknown as WorkflowScanCoordinatorContext;
 }
 
 const coordinatorSteps: Array<[string, WorkflowScanCoordinatorContext, string, string]> = [
   ["source", packShipContext("PACKING", "PACK_SOURCE", "SOURCE_ID"), "TOTE-7", "/scan-source"],
   ["item", packShipContext("PACKING", "PACK_ITEM", "ITEM_ID"), "TCDS-ITEM-1", "/scan-item"],
-  ["tracking label", packShipContext("PACKING", "PACK_VERIFY_LABEL", "TRACKING_NUMBER"), "1Z999AA10123456784", "/label/verify"],
-  ["outbound location", packShipContext("OUTBOUND", "STAGE", "OUTBOUND_LOCATION"), "OUT-A1", "/outbound-stage"],
+  ["package label pair", packShipContext("PACKING", "PACK_PACKAGE", "PACKAGE_ID"), "PKG-1", "/label/verify"],
+  ["outbound location", packShipContext("OUTBOUND", "PACK_OUTBOUND_LOCATION", "OUTBOUND_LOCATION"), "OUT-A1", "/outbound-stage"],
 ];
 
 describe("Pack/Ship retry through the 6.2D coordinator", () => {
@@ -148,7 +165,6 @@ describe("Pack/Ship retry through the 6.2D coordinator", () => {
     expect(second.headers["X-Correlation-ID"]).toBe(first.headers["X-Correlation-ID"]);
     expect(second.headers["X-Request-ID"]).not.toBe(first.headers["X-Request-ID"]);
 
-    // Once the outcome is known, the next scan is a new operation.
     await coordinator.onObservation(scan(`${raw}-NEXT`), ctx);
     expect(attempts[2].headers["Idempotency-Key"]).not.toBe(first.headers["Idempotency-Key"]);
   });

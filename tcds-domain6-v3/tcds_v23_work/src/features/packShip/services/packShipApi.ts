@@ -1,5 +1,6 @@
 import type { PackShipTask } from '../types/packShipTypes';
 import type { PackShipMessage } from '../types/packShipMessages';
+import type { PackShipLabelPairEvidence } from '../scanning/packShipLabelEvidence';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '3.10.1';
@@ -12,10 +13,6 @@ function installationId(): string {
   const created = uuid(); localStorage.setItem(key, created); return created;
 }
 
-/**
- * One logical scanner operation. Both ids stay the same on every retry of that operation,
- * so the server can recognise a replay; only X-Request-ID is new for each HTTP attempt.
- */
 export type OperationContext = {
   clientOperationId: string;
   correlationId: string;
@@ -61,9 +58,6 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
   } finally { window.clearTimeout(timeout); }
 }
 
-// scanSource, scanItem, verifyLabel and stageOutbound take an optional OperationContext.
-// With it, the call carries the operation's own ids on every attempt; without it, as from
-// the manual screen, each call gets new ones exactly as before.
 export const packShipApi = {
   getTask: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}`),
   claim: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }, uuid()),
@@ -78,7 +72,25 @@ export const packShipApi = {
   selectRate: (shipmentId: string, quoteId: string, reason?: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/rates/select`, { method: 'POST', body: JSON.stringify({ quoteId, reason }) }, uuid()),
   purchaseLabel: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/purchase`, { method: 'POST', body: '{}' }, uuid()),
   printLabel: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/print`, { method: 'POST', body: '{}' }, uuid()),
-  verifyLabel: (shipmentId: string, trackingBarcode: string, packageBarcode: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/verify`, { method: 'POST', body: JSON.stringify({ trackingBarcode, packageBarcode }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  verifyLabel: (
+    shipmentId: string,
+    trackingBarcode: string,
+    packageBarcode: string,
+    operation?: OperationContext,
+    evidence?: PackShipLabelPairEvidence,
+  ) => request<PackShipTask>(
+    `/api/v1/shipments/${shipmentId}/label/verify`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        trackingBarcode,
+        packageBarcode,
+        ...(evidence ? { physicalEvidence: evidence } : {}),
+      }),
+    },
+    operation?.clientOperationId ?? uuid(),
+    operation?.correlationId,
+  ),
   stageOutbound: (shipmentId: string, locationBarcode: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/outbound-stage`, { method: 'POST', body: JSON.stringify({ locationBarcode }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   completionCheck: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/completion-check`, { method: 'POST', body: '{}' }, uuid()),
 };
