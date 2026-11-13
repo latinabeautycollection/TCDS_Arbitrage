@@ -58,20 +58,22 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
   } finally { window.clearTimeout(timeout); }
 }
 
+// Calls given an OperationContext send its ids on every attempt, so a retry is recognised
+// as the same operation; without one, each call gets new ids.
 export const packShipApi = {
   getTask: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}`),
-  claim: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }, uuid()),
+  claim: (taskId: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   scanSource: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-source`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   scanItem: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-item`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
-  selectPackage: (taskId: string, profileId: string, reason: string | undefined, rowVersion: number) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/package`, { method: 'POST', body: JSON.stringify({ profileId, reason, rowVersion }) }, uuid()),
-  saveMeasurements: (taskId: string, payload: unknown, rowVersion: number) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/measurements`, { method: 'POST', body: JSON.stringify({ ...(payload as object), rowVersion }) }, uuid()),
-  seal: (taskId: string, rowVersion: number) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/seal`, { method: 'POST', body: JSON.stringify({ rowVersion }) }, uuid()),
+  selectPackage: (taskId: string, profileId: string, reason: string | undefined, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/package`, { method: 'POST', body: JSON.stringify({ profileId, reason, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  saveMeasurements: (taskId: string, payload: unknown, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/measurements`, { method: 'POST', body: JSON.stringify({ ...(payload as object), rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  seal: (taskId: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/seal`, { method: 'POST', body: JSON.stringify({ rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   validateAddress: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/address/validate`, { method: 'POST', body: '{}' }, uuid()),
   getRates: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/rates`, { method: 'POST', body: '{}' }, uuid()),
   evaluateRisk: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/risk/evaluate`, { method: 'POST', body: '{}' }, uuid()),
   selectRate: (shipmentId: string, quoteId: string, reason?: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/rates/select`, { method: 'POST', body: JSON.stringify({ quoteId, reason }) }, uuid()),
-  purchaseLabel: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/purchase`, { method: 'POST', body: '{}' }, uuid()),
-  printLabel: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/print`, { method: 'POST', body: '{}' }, uuid()),
+  purchaseLabel: (shipmentId: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/purchase`, { method: 'POST', body: '{}' }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  printLabel: (shipmentId: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/label/print`, { method: 'POST', body: '{}' }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   verifyLabel: (
     shipmentId: string,
     trackingBarcode: string,
