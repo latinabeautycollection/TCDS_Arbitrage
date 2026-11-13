@@ -110,7 +110,7 @@ function panelWithRealCoordinator(submit: ReturnType<typeof vi.fn>, onAccepted: 
 }
 
 describe("6.2D workflow scan panel retry", () => {
-  it("keeps Retry while the first scan is unresolved, through a camera restart and a second barcode", async () => {
+  it("keeps Retry while the first scan is unresolved, and keeps the camera off until it is resolved", async () => {
     const submit = vi.fn().mockRejectedValueOnce(timedOut()).mockResolvedValueOnce(accepted);
     const onAccepted = vi.fn();
     const { rerender } = render(panelWithRealCoordinator(submit, onAccepted));
@@ -122,17 +122,13 @@ describe("6.2D workflow scan panel retry", () => {
     rerender(panelWithRealCoordinator(submit, onAccepted));
     await waitFor(() => expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy());
 
-    // Stop the camera and start it again: scan A is still unresolved.
+    // Stop the camera and ask for it again: it stays off while scan A is unresolved,
+    // and the message and the button both point to Retry.
     await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Stop camera" })); });
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Scan with camera" }));
-    await waitFor(() => expect(scannerState.start).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
-
-    // Scan B: it is held back, and the message and the button agree.
-    scannerState.observation = scan("SKU-B");
-    rerender(panelWithRealCoordinator(submit, onAccepted));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Scan with camera" })); });
     await waitFor(() => expect(screen.getByRole("status").textContent).toMatch(/finish the previous scan first\. tap retry/i));
+    expect(scannerState.start).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(submit).toHaveBeenCalledTimes(1);
 
