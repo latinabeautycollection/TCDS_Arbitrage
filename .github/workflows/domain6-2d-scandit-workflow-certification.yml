@@ -85,5 +85,10 @@ jobs:
       # production build. Nothing from the earlier slices is reimplemented here.
       - run: npm run scandit:workflow:certify
 
+      # The Pack/Ship scanner wiring: its architecture check, strict TypeScript and tests.
+      - run: npm run packship:scanner:architecture
+      - run: npm run packship:scanner:typecheck
+      - run: npm run packship:scanner:test
+
       - run: npm run check --if-present
       - run: npm run verify --if-present
