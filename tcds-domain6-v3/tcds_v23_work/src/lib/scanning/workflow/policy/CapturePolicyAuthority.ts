@@ -66,6 +66,7 @@ export function captureContextFor(
       if (workflowStep === "PACK_PACKAGE") return intent === "PACKAGE_ID" ? "PACK_PACKAGE" : null;
       return null;
     case "OUTBOUND":
+      if (workflowStep !== "PACK_OUTBOUND_LOCATION") return null;
       return intent === "OUTBOUND_LOCATION" ? "PACK_OUTBOUND_LOCATION" : null;
     case "INVENTORY":
       return "INVENTORY_LOOKUP";

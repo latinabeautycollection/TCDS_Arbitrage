@@ -51,7 +51,7 @@ describe("6.2D uses the certified 6.2C capture policy", () => {
 
   it.each([
     ["PACKING", "PACK_SOURCE", "SOURCE_ID", "PACK_SOURCE"],
-    ["OUTBOUND", "STAGE", "OUTBOUND_LOCATION", "PACK_OUTBOUND_LOCATION"],
+    ["OUTBOUND", "PACK_OUTBOUND_LOCATION", "OUTBOUND_LOCATION", "PACK_OUTBOUND_LOCATION"],
   ] as const)("resolves %s %s %s through 6.2C as %s", async (workflow, workflowStep, value, contextId) => {
     const authority = new CertifiedCapturePolicyAuthority({ load: async () => authorityFixture() });
 
@@ -72,8 +72,9 @@ describe("6.2D uses the certified 6.2C capture policy", () => {
     ["INVENTORY", "LOOKUP", "ITEM_ID", "INVENTORY_LOOKUP"],
     ["RETURNS", "RESOLVE", "SERIAL", "RETURN_SERIAL"],
     ["PACKING", "PACK_SOURCE", "SOURCE_ID", "PACK_SOURCE"],
-    ["OUTBOUND", "STAGE", "OUTBOUND_LOCATION", "PACK_OUTBOUND_LOCATION"],
-    ["OUTBOUND", "STAGE", "LOCATION_ID", null],
+    ["OUTBOUND", "PACK_OUTBOUND_LOCATION", "OUTBOUND_LOCATION", "PACK_OUTBOUND_LOCATION"],
+    ["OUTBOUND", "STAGE", "OUTBOUND_LOCATION", null],
+    ["OUTBOUND", "PACK_OUTBOUND_LOCATION", "LOCATION_ID", null],
     ["PACKING", "PACK_SOURCE", "TOTE_ID", null],
   ] as const)("%s %s %s maps to %s", (workflow, step, value, expected) => {
     expect(captureContextFor(workflow, step, value)).toBe(expected);
