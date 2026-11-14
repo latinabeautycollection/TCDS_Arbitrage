@@ -7,6 +7,7 @@ import { ReceiveScreen } from '../features/receiving/ReceiveScreen';
 import { ReturnsScreen } from '../features/returns/ReturnsScreen';
 import { SupervisorConsoleScreen } from '../features/supervisor/SupervisorConsoleScreen';
 import { PackShipScreen } from '../features/packShip/PackShipScreen';
+import { packShipCapturePolicyAuthority } from '../features/packShip/scanning/packShipCapturePolicyAuthority';
 import { InventoryListScreen } from '../features/inventory/InventoryListScreen';
 import { InventoryDetailScreen } from '../features/inventory/InventoryDetailScreen';
 import { PickInProgressScreen } from '../features/picking/PickInProgressScreen';
@@ -52,7 +53,7 @@ export const router = createBrowserRouter([
     { path: 'inventory', element: protect(<InventoryListScreen />) },
     { path: 'inventory/detail', element: protect(<InventoryDetailScreen />) },
     { path: 'pick', element: protect(<PickInProgressScreen />) },
-    { path: 'pack-ship', element: protect(<PackShipScreen />) },
+    { path: 'pack-ship', element: protect(<PackShipScreen capturePolicyAuthority={packShipCapturePolicyAuthority} />) },
     { path: 'returns', element: protect(<ReturnsScreen />) },
     { path: 'settings', element: protect(<SupervisorConsoleScreen />) },
     // 6.2B scanner diagnostic: behind the existing sign-in guard and not linked from any navigation.

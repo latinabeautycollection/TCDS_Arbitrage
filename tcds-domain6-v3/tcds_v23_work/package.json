@@ -40,7 +40,11 @@
     "scandit:workflow:typecheck": "tsc --noEmit -p config/typescript/scandit-6.2d.tsconfig.json",
     "scandit:workflow:test": "vitest run --config config/vitest/scandit-6.2d.vitest.config.ts",
     "scandit:workflow:certify": "npm run scandit:policy:certify && npm run scandit:workflow:architecture && npm run scandit:workflow:typecheck && npm run scandit:workflow:test && npm run build && npm run scandit:workflow:verify-bundle",
-    "scandit:workflow:verify-bundle": "node scripts/scandit/verify-domain6-2d-bundle.mjs"
+    "scandit:workflow:verify-bundle": "node scripts/scandit/verify-domain6-2d-bundle.mjs",
+    "packship:scanner:architecture": "node scripts/scandit/verify-packship-scanner-integration.mjs",
+    "packship:scanner:typecheck": "tsc --noEmit -p config/typescript/packship-scanner-integration.tsconfig.json",
+    "packship:scanner:test": "vitest run --config config/vitest/packship-scanner-integration.vitest.config.ts",
+    "packship:scanner:certify": "npm run scandit:workflow:certify && npm run packship:scanner:architecture && npm run packship:scanner:typecheck && npm run packship:scanner:test && npm run build"
   },
   "dependencies": {
     "@scandit/web-datacapture-barcode": "8.5.3",

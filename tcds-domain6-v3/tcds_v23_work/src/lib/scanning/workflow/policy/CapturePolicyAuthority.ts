@@ -61,9 +61,12 @@ export function captureContextFor(
       return intent === "TOTE_ID" ? "PICK_DESTINATION" : null;
     case "PACKING":
       if (workflowStep === "PACK_SOURCE") return intent === "SOURCE_ID" ? "PACK_SOURCE" : null;
-      if (workflowStep === "PACK_ITEM") return "PACK_ITEM";
-      return workflowStep === "PACK_VERIFY_LABEL" ? "TRACKING_LABEL" : null;
+      if (workflowStep === "PACK_ITEM") return intent === "ITEM_ID" ? "PACK_ITEM" : null;
+      if (workflowStep === "PACK_TRACKING_LABEL") return intent === "TRACKING_NUMBER" ? "TRACKING_LABEL" : null;
+      if (workflowStep === "PACK_PACKAGE") return intent === "PACKAGE_ID" ? "PACK_PACKAGE" : null;
+      return null;
     case "OUTBOUND":
+      if (workflowStep !== "PACK_OUTBOUND_LOCATION") return null;
       return intent === "OUTBOUND_LOCATION" ? "PACK_OUTBOUND_LOCATION" : null;
     case "INVENTORY":
       return "INVENTORY_LOOKUP";
