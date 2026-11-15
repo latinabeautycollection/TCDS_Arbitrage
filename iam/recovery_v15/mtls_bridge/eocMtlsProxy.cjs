@@ -2,7 +2,7 @@
 // STAGING. EOC (acquisition server) -> Warehouse IAM mTLS proxy. TLS terminates here; only /internal/v1/iam/eoc/* is
 // forwarded, unchanged, to the private internal IAM listener on 127.0.0.1 (the bridge still checks its own HMAC + nonce).
 // A client is admitted only if ALL hold: source IP allowlisted, certificate chains to our private CA (checked in the
-// handshake), EKU clientAuth, exact CN + single SAN URI identity, and its SHA-256 fingerprint is listed in
+// handshake), EKU clientAuth, exact CN + single SAN URI of one allowed identity, and its SHA-256 fingerprint is listed in
 // allowed_clients.txt (re-read per request; deleting the line revokes the certificate without a restart).
 const https = require('node:https');
 const http = require('node:http');
@@ -23,10 +23,18 @@ function allowed() {
       .filter(l => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(l)));
   } catch { return new Set(); }
 }
+// Allowed workload identities: config "identities" (list) or the original single "identity". Each is an exact CN + its
+// own single SAN URI + a caller name; a certificate must match one identity completely (a CN from one and a URI from
+// another is refused). The matched caller is sent upstream in x-tcds-workload-caller (clients cannot set it: only the
+// FORWARD headers are copied), so the bridge can require that the HMAC key belongs to THIS transport identity.
+const IDENTITIES = (Array.isArray(C.identities) ? C.identities : [{ caller: 'eoc-bff', ...C.identity }])
+  .filter(i => i && i.cn && i.uri && i.caller);
+const identityOf = cert => IDENTITIES.find(i => cert && cert.subject && i.cn === cert.subject.CN);
 function identityProblem(cert) {
   if (!cert || !cert.subject) return 'NO_CERT';
-  if (cert.subject.CN !== C.identity.cn) return 'CN';
-  if ((cert.subjectaltname || '') !== 'URI:' + C.identity.uri) return 'SAN';
+  const id = identityOf(cert);
+  if (!id) return 'CN';
+  if ((cert.subjectaltname || '') !== 'URI:' + id.uri) return 'SAN';
   if (!(cert.ext_key_usage || []).includes(CLIENT_AUTH)) return 'EKU';
   if (!allowed().has(cert.fingerprint256)) return 'NOT_ALLOWLISTED';
   return null;
@@ -48,11 +56,12 @@ const server = https.createServer({
   if (Number(req.headers['content-length'] || 0) > MAX_BODY) return deny(413, 'REQUEST_TOO_LARGE');
   const headers = {};
   for (const h of FORWARD) if (req.headers[h] !== undefined) headers[h] = req.headers[h];
+  headers['x-tcds-workload-caller'] = identityOf(cert).caller;
   const started = Date.now();
   const up = http.request({ host: '127.0.0.1', port: C.upstreamPort, method: req.method, path: req.url, headers, timeout: 5000 }, r => {
     res.writeHead(r.statusCode, { 'content-type': r.headers['content-type'] || 'application/json', 'cache-control': 'no-store' });
     r.pipe(res);
-    log({ event: 'FORWARDED', ip, method: req.method, path: req.url.split('?')[0], status: r.statusCode, ms: Date.now() - started });
+    log({ event: 'FORWARDED', ip, caller: identityOf(cert).caller, method: req.method, path: req.url.split('?')[0], status: r.statusCode, ms: Date.now() - started });
   });
   up.on('timeout', () => up.destroy(new Error('UPSTREAM_TIMEOUT')));
   up.on('error', e => { log({ event: 'UPSTREAM_ERROR', error: e.message }); if (res.headersSent) res.destroy(); else deny(502, 'IAM_UPSTREAM_UNAVAILABLE'); });
