@@ -1,0 +1,18 @@
+{
+  "name": "@tcds/eoc-central-oidc-issuer",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/server.mjs && node --check src/security-v11.mjs && node --check src/iam-verifier-client.mjs && node --check src/pg-adapter.mjs && node --check src/central-iam-route-adapter.mjs && node --check deploy/issuer-passkey-mtls-proxy.cjs && node --check eoc-bff-overlay/oidc-contract.mjs"
+  },
+  "dependencies": {
+    "oidc-provider": "9.13.3",
+    "pg": "8.16.3"
+  }
+}
