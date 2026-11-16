@@ -1,5 +1,20 @@
 # Central OIDC issuer (Domain 6.4 V1.2): staging deployment
 
+**Current bundle: `issuer-v1.2-r3.tgz`** = r2 + the dev team's three fixes (`issuer-v1.2-r3-fixes.patch`):
+1. `OIDC_PRODUCTION_ENABLED` replaced by `OIDC_RUNTIME_ENABLED` (process start) and `OIDC_LOGIN_ENABLED` (authentication,
+   fail closed: only the exact string `true` enables it). While disabled, only discovery, JWKS and the two health checks
+   are served; authorization, token, interaction/passkey, userinfo and every other route get 503 `LOGIN_DISABLED`, and
+   `findAccount` returns no account, so no code or token can be issued or exchanged.
+2. `provider.proxy = true` (oidc-provider 9.13.3; `provider.app` is deprecated). `oidc-provider` pinned to 9.13.3.
+3. The IAM bridge/passkey client sends `randomUUID()` nonces (was 20 random bytes in hex), signed exactly as sent.
+
+Tests: 154/154 (their 130, one extra startup refusal, 23 new for the fixes). `issuer_deploy.sh upgrade` moves a running
+r2 to r3 (env backed up); `rollback` returns to r2.
+
+---
+
+Original r2 notes:
+
 Runs the dev team's issuer **unchanged** (`issuer-v1.2-r2.tgz` = their `src/`, `deploy/`, `tests/`, `sql/`,
 `eoc-bff-overlay/`, `scripts/provision-private-secrets.mjs`, verified against their `SHA256SUMS`) with our
 `package.json` / `package-lock.json`:
@@ -22,7 +37,6 @@ Staging result 2026-11-15: running, verify 13/13. Readiness refuses until the IA
 No nginx site until the `login-stg` DNS record exists.
 
 Notes:
-- `OIDC_PRODUCTION_ENABLED` must be `true` for the process to start at all (`policy.mjs`); "disabled" on staging means
-  loopback-only with no public site.
+- (r2 only) `OIDC_PRODUCTION_ENABLED` had to be `true` for the process to start at all; fixed in r3.
 - The DB URL deliberately has no `sslmode`: with it, node-postgres would override the explicit `ssl.ca` and drop CA pinning.
 - PM2 only reads a config file whose name ends in `.config.cjs`; hence `ecosystem.issuer.config.cjs`.

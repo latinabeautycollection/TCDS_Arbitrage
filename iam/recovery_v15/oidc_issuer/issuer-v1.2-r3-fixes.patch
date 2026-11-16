@@ -1,0 +1,202 @@
+--- a/src/policy.mjs
++++ b/src/policy.mjs
+@@ -11,9 +11,19 @@
+  if(env.OIDC_CLIENT_SECRET.length<32||env.IAM_WORKLOAD_KEY.length<32||env.IAM_EOC_BRIDGE_KEY.length<32)throw Error('SHORT_SECRET');
+  if(env.OIDC_COOKIE_KEYS.split(',').filter(x=>x.trim().length>=32).length<2)throw Error('COOKIE_KEY_ROTATION_NOT_CONFIGURED');
+  if(!env.IAM_CA_FILE||!env.IAM_CLIENT_CERT||!env.IAM_CLIENT_KEY)throw Error('MTLS_CONFIGURATION_REQUIRED');
+- if(env.OIDC_PRODUCTION_ENABLED!=='true')throw Error('ISSUER_DISABLED_UNTIL_CERTIFIED');
+- return {issuer:issuer.origin,redirect:redirect.href};
++ // FIX 1: two settings. OIDC_RUNTIME_ENABLED gates process start; OIDC_LOGIN_ENABLED gates authentication.
++ if(env.OIDC_RUNTIME_ENABLED!=='true')throw Error('ISSUER_RUNTIME_DISABLED');
++ return {issuer:issuer.origin,redirect:redirect.href,login:loginSetting(env)};
+ }
++// Login gate. Fail closed: only the exact string 'true' enables authentication; missing or any other value disables
++// it (valid=false flags a missing/invalid setting so the operator is told).
++export function loginSetting(env){
++ const v=env?.OIDC_LOGIN_ENABLED;
++ return Object.freeze({enabled:v==='true',valid:v==='true'||v==='false'});
++}
++// While login is disabled only these paths are served; everything else (authorization, token, interaction/passkey,
++// userinfo, end-session, revocation) is refused before it reaches oidc-provider.
++export const PATHS_WHEN_LOGIN_DISABLED=Object.freeze(new Set(['/.well-known/openid-configuration','/jwks','/internal/health/live','/internal/health/ready']));
+ export function assertPkce(params){
+  if(params.response_type!=='code'||params.code_challenge_method!=='S256'||typeof params.code_challenge!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(params.code_challenge))throw Error('PKCE_S256_REQUIRED');
+  if(!String(params.scope||'').split(/\s+/).includes('openid'))throw Error('OPENID_SCOPE_REQUIRED');
+--- a/src/server.mjs
++++ b/src/server.mjs
+@@ -4,11 +4,13 @@
+ import {csrfToken, parseIssuerCookies, sameOriginRequest, validatedIssuerKeys} from './security-v11.mjs';
+ import pg from 'pg';
+ import Provider from 'oidc-provider';
+-import {requiredEnv,assertPkce,assertFreshOidcRequest,REQUIRED_ACR,constantEqual,hashHex,safeUid} from './policy.mjs';
++import {requiredEnv,assertPkce,assertFreshOidcRequest,REQUIRED_ACR,constantEqual,hashHex,safeUid,PATHS_WHEN_LOGIN_DISABLED} from './policy.mjs';
+ import {createAdapterFactory} from './pg-adapter.mjs';
+ import {createIamVerifier} from './iam-verifier-client.mjs';
+ const env=process.env;
+-const {issuer,redirect}=requiredEnv(env);
++const {issuer,redirect,login}=requiredEnv(env);
++if(!login.valid)console.error('OIDC_LOGIN_ENABLED missing or invalid: authentication DENIED (fail closed)');
++console.log(`TCDS OIDC issuer login gate: ${login.enabled?'ENABLED':'DISABLED'}`);
+ const pool=new pg.Pool({connectionString:env.OIDC_DATABASE_URL,ssl:{ca:readFileSync(env.OIDC_DB_CA_FILE,'utf8'),rejectUnauthorized:true},max:10});
+ // All services must be external and persistent: no in-memory identity, token or passkey store.
+ await pool.query('SELECT count(*) FROM eoc_oidc.artifacts');
+@@ -25,6 +27,7 @@
+  ttl:{AuthorizationCode:90,AccessToken:300,IdToken:300,Interaction:180,Session:300},
+  interactions:{url:(_ctx,interaction)=>`/interaction/${interaction.uid}`},
+  async findAccount(_ctx,id){
++   if(!login.enabled)return undefined; // no account => no code/token/claims while login is disabled
+    if(!/^[-A-Za-z0-9._~]{16,255}$/.test(id))return undefined;
+    // Reverify active account and verified 623 subject binding at issuance/claims time.
+    // No cached positive authority and no reliance on email, title or Warehouse device.
+@@ -32,7 +35,7 @@
+    return {accountId:id,async claims(){await verifier.checkSubject({issuer,subject:id});return {sub:id}}};
+  },
+  });
+-provider.app.proxy=true; // Trust ONLY the loopback Nginx proxy; Nginx overwrites all forwarded headers.
++provider.proxy=true; // FIX 2 (oidc-provider 9.13): Provider is the Koa app. Trust ONLY the loopback Nginx proxy.
+ const bindHost='127.0.0.1',bindPort=Number(env.OIDC_PORT||8401);
+ if(!Number.isInteger(bindPort)||bindPort<1024||bindPort>65535)throw Error('INVALID_PORT');
+ const allowedHost=new URL(issuer).host;
+@@ -43,6 +46,7 @@
+ function sameOrigin(req){return sameOriginRequest(req.headers,issuer)}
+ async function body(req){const ct=req.headers['content-type']?.split(';')[0];if(!['application/json','application/x-www-form-urlencoded'].includes(ct))throw Error('CONTENT_TYPE_REQUIRED');let chunks=[],size=0;for await(const c of req){size+=c.length;if(size>16384)throw Error('BODY_LIMIT');chunks.push(c)}const str=Buffer.concat(chunks).toString('utf8');if(ct==='application/json')return JSON.parse(str);const params=new URLSearchParams(str);return {csrf:params.get('csrf'),credential:JSON.parse(params.get('credential')||'null')}}
+ async function begin(req,res,uid){
++ if(!login.enabled)return safeJson(res,503,{error:'LOGIN_DISABLED'});
+  if(!safeUid(uid))return safeJson(res,400,{error:'INVALID_INTERACTION'});
+  const details=await provider.interactionDetails(req,res);
+  if(details.uid!==uid||details.prompt?.name!=='login')return safeJson(res,403,{error:'LOGIN_REQUIRED'});
+@@ -82,6 +86,7 @@
+  return safeJson(res,200,{options:x.rows[0].options,csrf:csrf(uid,req)});
+ }
+ async function complete(req,res,uid){
++ if(!login.enabled)return safeJson(res,503,{error:'LOGIN_DISABLED'});
+  if(!sameOrigin(req))return safeJson(res,403,{error:'ORIGIN_DENIED'});
+  const details=await provider.interactionDetails(req,res);if(details.uid!==uid||details.prompt?.name!=='login')return safeJson(res,403,{error:'INTERACTION_NOT_AUTHORIZED'});
+  assertPkce(details.params);assertFreshOidcRequest(details.params);
+@@ -111,9 +116,11 @@
+  try{
+   const u=new URL(req.url,issuer);
+   if(req.headers.host!==allowedHost)return safeJson(res,421,{error:'INVALID_HOST'});
++  // FIX 1: server-side login gate, checked before any OIDC route (authorization, token, interaction, passkey).
++  if(!login.enabled&&!PATHS_WHEN_LOGIN_DISABLED.has(u.pathname))return safeJson(res,503,{error:'LOGIN_DISABLED'});
+   if(u.pathname==='/internal/health/live')return safeJson(res,200,{alive:true});
+   if(u.pathname==='/internal/health/ready'){
+-   await pool.query('SELECT 1 FROM eoc_oidc.artifacts LIMIT 1');await verifier.readiness();return safeJson(res,200,{ready:true,database:true,iamBridge:true,issuerConfigured:true,certified:false});
++   await pool.query('SELECT 1 FROM eoc_oidc.artifacts LIMIT 1');await verifier.readiness();return safeJson(res,200,{ready:true,database:true,iamBridge:true,issuerConfigured:true,loginEnabled:login.enabled,certified:false});
+   }
+   if(u.pathname==='/assets/passkey-interaction.js'&&req.method==='GET'){
+     res.writeHead(200,{'content-type':'application/javascript; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(js);
+--- a/src/iam-verifier-client.mjs
++++ b/src/iam-verifier-client.mjs
+@@ -1,5 +1,5 @@
+ import https from 'node:https';
+-import {createHash,createHmac,randomBytes} from 'node:crypto';
++import {createHash,createHmac,randomUUID} from 'node:crypto';
+ import {readFileSync} from 'node:fs';
+ import {assertPasskeyProof} from './policy.mjs';
+ function canonical(method,path,stamp,nonce,bytes){return `${method}\n${path}\n${stamp}\n${nonce}\n${createHash('sha256').update(bytes).digest('hex')}`}
+@@ -9,14 +9,14 @@
+  const signing=env.IAM_WORKLOAD_KEY;
+  const bridgeKey=env.IAM_EOC_BRIDGE_KEY;
+  async function call(op,body){
+-  const path=`/internal/v1/iam/oidc/passkey/${op}`,url=new URL(path,base),raw=Buffer.from(JSON.stringify(body)),stamp=String(Math.floor(Date.now()/1000)),nonce=randomBytes(20).toString('hex');
++  const path=`/internal/v1/iam/oidc/passkey/${op}`,url=new URL(path,base),raw=Buffer.from(JSON.stringify(body)),stamp=String(Math.floor(Date.now()/1000)),nonce=randomUUID();
+   const headers={'content-type':'application/json','content-length':String(raw.length),'x-eoc-workload-timestamp':stamp,'x-eoc-workload-nonce':nonce,'x-eoc-workload-signature':signWorkload(signing,'POST',path,stamp,nonce,raw)};
+   return post(url,{raw,headers,caFile:env.IAM_CA_FILE,certFile:env.IAM_CLIENT_CERT,keyFile:env.IAM_CLIENT_KEY});
+  }
+  return {
+   readiness:async()=>{
+    if(!bridgeKey||bridgeKey.length<32)throw Error('IAM_EOC_BRIDGE_KEY_REQUIRED');
+-   const path='/internal/v1/iam/eoc/ready',stamp=String(Math.floor(Date.now()/1000)),nonce=randomBytes(20).toString('hex'),raw=Buffer.alloc(0);
++   const path='/internal/v1/iam/eoc/ready',stamp=String(Math.floor(Date.now()/1000)),nonce=randomUUID(),raw=Buffer.alloc(0);
+    const upstream=new URL(env.IAM_EOC_BRIDGE_API_URL||env.IAM_PASSKEY_API_URL);
+    const result=await post(new URL(path,upstream),{method:'GET',raw,headers:{'x-eoc-workload-timestamp':stamp,'x-eoc-workload-nonce':nonce,'x-eoc-workload-signature':signWorkload(bridgeKey,'GET',path,stamp,nonce,raw)},caFile:env.IAM_CA_FILE,certFile:env.IAM_CLIENT_CERT,keyFile:env.IAM_CLIENT_KEY});
+    if(result?.ready!==true||result.epochAuthority!==true||result.federationAuthority!==true)throw Error('IAM_BRIDGE_UNREADY');
+@@ -31,11 +31,11 @@
+    if(bridgeBase.protocol!=='https:')throw Error('BRIDGE_HTTPS_REQUIRED');
+    const resolvePath='/internal/v1/iam/eoc/federation/resolve';
+    const raw=Buffer.from(JSON.stringify({issuer,providerSubject:subject}));
+-   const stamp=String(Math.floor(Date.now()/1000)),nonce=randomBytes(20).toString('hex');
++   const stamp=String(Math.floor(Date.now()/1000)),nonce=randomUUID();
+    const response=await post(new URL(resolvePath,bridgeBase),{raw,headers:{'content-type':'application/json','content-length':String(raw.length),'x-eoc-workload-timestamp':stamp,'x-eoc-workload-nonce':nonce,'x-eoc-workload-signature':signWorkload(bridgeKey,'POST',resolvePath,stamp,nonce,raw)},caFile:env.IAM_CA_FILE,certFile:env.IAM_CLIENT_CERT,keyFile:env.IAM_CLIENT_KEY});
+    if(response?.verified!==true||!(/^[0-9a-f-]{36}$/i.test(response.userId||'')))throw Error('UNVERIFIED_FEDERATED_SUBJECT');
+    const subjectPath='/internal/v1/iam/eoc/subject/'+response.userId;
+-   const stamp2=String(Math.floor(Date.now()/1000)),nonce2=randomBytes(20).toString('hex');
++   const stamp2=String(Math.floor(Date.now()/1000)),nonce2=randomUUID();
+    const status=await post(new URL(subjectPath,bridgeBase),{method:'GET',raw:Buffer.alloc(0),headers:{'x-eoc-workload-timestamp':stamp2,'x-eoc-workload-nonce':nonce2,'x-eoc-workload-signature':signWorkload(bridgeKey,'GET',subjectPath,stamp2,nonce2,Buffer.alloc(0))},caFile:env.IAM_CA_FILE,certFile:env.IAM_CLIENT_CERT,keyFile:env.IAM_CLIENT_KEY});
+    if(status?.userId!==response.userId||status?.active!==true||!Number.isSafeInteger(status?.epoch)||status.epoch<0)throw Error('IAM_SUBJECT_INACTIVE_OR_UNVERIFIED');
+    return {userId:response.userId,epoch:status.epoch};
+--- a/tests/policy.test.mjs
++++ b/tests/policy.test.mjs
+@@ -1,8 +1,8 @@
+ import test from 'node:test';import assert from 'node:assert/strict';
+ import {requiredEnv,assertPkce,assertFreshOidcRequest,assertPasskeyProof,REQUIRED_ACR,constantEqual,safeUid} from '../src/policy.mjs';
+-const env={OIDC_PRODUCTION_ENABLED:'true',OIDC_ISSUER:'https://login-stg.tcdsolutionsgroup.com/',OIDC_CLIENT_ID:'tcds-eoc-stg',OIDC_CLIENT_SECRET:'a'.repeat(48),OIDC_REDIRECT_URI:'https://eoc-stg.tcdsolutionsgroup.com/api/eoc/auth/callback',OIDC_JWKS_FILE:'/tmp/key',OIDC_DB_CA_FILE:'ca',OIDC_COOKIE_KEYS:'a'.repeat(40)+','+'b'.repeat(40),OIDC_DATABASE_URL:'postgresql://user:password@issuer-db.internal/issuer',IAM_PASSKEY_API_URL:'https://iam-internal-stg.tcdsolutionsgroup.com',IAM_WORKLOAD_KEY:'d'.repeat(40),IAM_EOC_BRIDGE_KEY:'f'.repeat(40),OIDC_PASSKEY_SIGNING_KEY:'e'.repeat(40),IAM_CA_FILE:'ca',IAM_CLIENT_CERT:'cert',IAM_CLIENT_KEY:'key'};
++const env={OIDC_RUNTIME_ENABLED:'true',OIDC_LOGIN_ENABLED:'false',OIDC_ISSUER:'https://login-stg.tcdsolutionsgroup.com/',OIDC_CLIENT_ID:'tcds-eoc-stg',OIDC_CLIENT_SECRET:'a'.repeat(48),OIDC_REDIRECT_URI:'https://eoc-stg.tcdsolutionsgroup.com/api/eoc/auth/callback',OIDC_JWKS_FILE:'/tmp/key',OIDC_DB_CA_FILE:'ca',OIDC_COOKIE_KEYS:'a'.repeat(40)+','+'b'.repeat(40),OIDC_DATABASE_URL:'postgresql://user:password@issuer-db.internal/issuer',IAM_PASSKEY_API_URL:'https://iam-internal-stg.tcdsolutionsgroup.com',IAM_WORKLOAD_KEY:'d'.repeat(40),IAM_EOC_BRIDGE_KEY:'f'.repeat(40),OIDC_PASSKEY_SIGNING_KEY:'e'.repeat(40),IAM_CA_FILE:'ca',IAM_CLIENT_CERT:'cert',IAM_CLIENT_KEY:'key'};
+ test('config: approved issuer, separate client and private mTLS',()=>assert.equal(requiredEnv(env).issuer,'https://login-stg.tcdsolutionsgroup.com'));
+-for(const [key,value] of [['OIDC_PRODUCTION_ENABLED','false'],['OIDC_ISSUER','http://login-stg.tcdsolutionsgroup.com/'],['OIDC_CLIENT_SECRET','weak'],['OIDC_COOKIE_KEYS','one'],['IAM_CA_FILE',''],['OIDC_REDIRECT_URI','https://evil.example.com/callback'],['OIDC_ISSUER','https://eoc-stg.tcdsolutionsgroup.com/']])test('config rejects '+key,()=>assert.throws(()=>requiredEnv({...env,[key]:value})));
++for(const [key,value] of [['OIDC_RUNTIME_ENABLED','false'],['OIDC_RUNTIME_ENABLED',undefined],['OIDC_ISSUER','http://login-stg.tcdsolutionsgroup.com/'],['OIDC_CLIENT_SECRET','weak'],['OIDC_COOKIE_KEYS','one'],['IAM_CA_FILE',''],['OIDC_REDIRECT_URI','https://evil.example.com/callback'],['OIDC_ISSUER','https://eoc-stg.tcdsolutionsgroup.com/']])test('config rejects '+key,()=>assert.throws(()=>requiredEnv({...env,[key]:value})));
+ const good={response_type:'code',code_challenge_method:'S256',code_challenge:'a'.repeat(43),scope:'openid'};
+ test('pkce required S256',()=>assert.equal(assertPkce(good),true));
+ for(const [key,value] of [['response_type','id_token'],['code_challenge_method','plain'],['code_challenge','short'],['scope','profile']])test('pkce rejects '+key,()=>assert.throws(()=>assertPkce({...good,[key]:value})));
+--- a/deploy/issuer.env.example
++++ b/deploy/issuer.env.example
+@@ -1,5 +1,6 @@
+ # Example values only. Nothing below is an issued client registration or secret.
+-OIDC_PRODUCTION_ENABLED=false
++OIDC_RUNTIME_ENABLED=true
++OIDC_LOGIN_ENABLED=false
+ OIDC_ISSUER=https://login-stg.tcdsolutionsgroup.com/
+ OIDC_CLIENT_ID=ISSUE_DURING_PRIVATE_CLIENT_REGISTRATION
+ OIDC_CLIENT_SECRET=SET_USING_PRIVATE_SECRETS_MANAGER_AT_LEAST_32_BYTES
+--- a/tests/v12-fixes.test.mjs
++++ b/tests/v12-fixes.test.mjs
+@@ -0,0 +1,48 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {loginSetting,PATHS_WHEN_LOGIN_DISABLED,requiredEnv} from '../src/policy.mjs';
++import {createIamVerifier,signWorkload} from '../src/iam-verifier-client.mjs';
++
++// FIX 1: login gate fails closed
++test('login gate: exact "true" enables',()=>assert.deepEqual({...loginSetting({OIDC_LOGIN_ENABLED:'true'})},{enabled:true,valid:true}));
++test('login gate: "false" disables (valid)',()=>assert.deepEqual({...loginSetting({OIDC_LOGIN_ENABLED:'false'})},{enabled:false,valid:true}));
++for(const v of [undefined,'','TRUE','True','yes','1',' true','true '])
++ test(`login gate: ${JSON.stringify(v)} disables and is flagged invalid`,()=>assert.deepEqual({...loginSetting({OIDC_LOGIN_ENABLED:v})},{enabled:false,valid:false}));
++test('login gate: only discovery, JWKS and health are served while disabled',()=>assert.deepEqual([...PATHS_WHEN_LOGIN_DISABLED].sort(),
++ ['/.well-known/openid-configuration','/internal/health/live','/internal/health/ready','/jwks']));
++for(const p of ['/auth','/token','/interaction/abcdefgh','/interaction/abcdefgh/complete','/me','/session/end','/token/revocation','/reg'])
++ test(`login gate: ${p} is not served while disabled`,()=>assert.equal(PATHS_WHEN_LOGIN_DISABLED.has(p),false));
++const base={OIDC_RUNTIME_ENABLED:'true',OIDC_ISSUER:'https://login-stg.tcdsolutionsgroup.com/',OIDC_CLIENT_ID:'tcds-eoc-stg',OIDC_CLIENT_SECRET:'a'.repeat(48),
++ OIDC_REDIRECT_URI:'https://eoc-stg.tcdsolutionsgroup.com/api/eoc/auth/callback',OIDC_JWKS_FILE:'/tmp/key',OIDC_DB_CA_FILE:'ca',OIDC_COOKIE_KEYS:'a'.repeat(40)+','+'b'.repeat(40),
++ OIDC_DATABASE_URL:'postgresql://user:password@issuer-db.internal/issuer',IAM_PASSKEY_API_URL:'https://iam-internal-stg.tcdsolutionsgroup.com',IAM_WORKLOAD_KEY:'d'.repeat(40),
++ IAM_EOC_BRIDGE_KEY:'f'.repeat(40),OIDC_PASSKEY_SIGNING_KEY:'e'.repeat(40),IAM_CA_FILE:'ca',IAM_CLIENT_CERT:'cert',IAM_CLIENT_KEY:'key'};
++test('runtime enabled + login setting missing: starts with login disabled',()=>{const r=requiredEnv(base);assert.equal(r.login.enabled,false);assert.equal(r.login.valid,false)});
++test('runtime disabled: refuses to start',()=>assert.throws(()=>requiredEnv({...base,OIDC_RUNTIME_ENABLED:'false'}),/ISSUER_RUNTIME_DISABLED/));
++test('legacy OIDC_PRODUCTION_ENABLED alone no longer starts the issuer',()=>{const {OIDC_RUNTIME_ENABLED,...legacy}=base;assert.throws(()=>requiredEnv({...legacy,OIDC_PRODUCTION_ENABLED:'true'}),/ISSUER_RUNTIME_DISABLED/)});
++
++// FIX 3: UUID nonces, signed exactly as sent
++const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
++const env={IAM_PASSKEY_API_URL:'https://iam.test',IAM_EOC_BRIDGE_API_URL:'https://bridge.test',IAM_WORKLOAD_KEY:'w'.repeat(48),IAM_EOC_BRIDGE_KEY:'k'.repeat(48),
++ IAM_CA_FILE:'ca',IAM_CLIENT_CERT:'cert',IAM_CLIENT_KEY:'key'};
++function capture(){
++ const calls=[];
++ const post=async(url,{raw,headers,method='POST'})=>{calls.push({url,raw,headers,method});
++  if(url.pathname.endsWith('/ready'))return {ready:true,epochAuthority:true,federationAuthority:true};
++  if(url.pathname.endsWith('/federation/resolve'))return {verified:true,userId:'123e4567-e89b-42d3-a456-426614174000'};
++  if(url.pathname.includes('/subject/'))return {userId:'123e4567-e89b-42d3-a456-426614174000',active:true,epoch:4};
++  return {challengeId:'c'.repeat(16),options:{challenge:'x'}};};
++ return {calls,post};
++}
++test('every bridge/passkey call sends a UUID nonce and signs that exact nonce',async()=>{
++ const {calls,post}=capture();const v=createIamVerifier(env,post);
++ await v.readiness();
++ await v.checkSubject({issuer:'https://login-stg.tcdsolutionsgroup.com',subject:'v1.opaque-subject-123456'});
++ await v.begin({interactionId:'interaction_1',requestId:'123e4567-e89b-42d3-a456-426614174001',issuer:'https://login-stg.tcdsolutionsgroup.com'});
++ assert.equal(calls.length,4);
++ for(const c of calls){
++  const n=c.headers['x-eoc-workload-nonce'],ts=c.headers['x-eoc-workload-timestamp'];
++  assert.match(n,UUID,`nonce for ${c.url.pathname}`);
++  const key=c.url.pathname.startsWith('/internal/v1/iam/oidc/')?env.IAM_WORKLOAD_KEY:env.IAM_EOC_BRIDGE_KEY;
++  assert.equal(c.headers['x-eoc-workload-signature'],signWorkload(key,c.method,c.url.pathname,ts,n,c.raw),`signature for ${c.url.pathname}`);
++ }
++ assert.equal(new Set(calls.map(c=>c.headers['x-eoc-workload-nonce'])).size,4,'nonces are unique');
++});
