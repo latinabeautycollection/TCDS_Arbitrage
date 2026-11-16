@@ -11,6 +11,10 @@
 #   start            CONFIRM=START-ISSUER: PM2 `oidc-issuer-staging` from a CLEAN environment (no shell secrets inherited)
 #   verify           read only: loopback discovery/JWKS/refusals with Host login-stg; expects IAM readiness to FAIL for now
 #   stop             pm2 stop + delete oidc-issuer-staging
+#   upgrade          CONFIRM=UPGRADE-ISSUER: r2 -> r3 (dev team's 3 fixes): install-app r3, replace
+#                    OIDC_PRODUCTION_ENABLED=true with OIDC_RUNTIME_ENABLED=true + OIDC_LOGIN_ENABLED=false (env backed
+#                    up), clear the issuer's PM2 logs, restart
+#   rollback         CONFIRM=ROLLBACK-ISSUER: back to r2 and the backed-up env, restart
 # Usage: bash /tmp/recov15/oidc_issuer/issuer_deploy.sh <cmd>
 set -euo pipefail
 D=/tmp/recov15/oidc_issuer
@@ -18,8 +22,9 @@ BASE=/srv/arb-system/oidc_issuer
 SEC=/etc/tcds-issuer
 NODEV=v22.23.4
 NODE_SHA_X64=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce
-BUNDLE=issuer-v1.2-r2
-BUNDLE_SHA=14a4abf89bd1268c7344fbac055d96399924338ce842a4891fb56a9b762fb654
+BUNDLE=issuer-v1.2-r3
+BUNDLE_SHA=11e75e87801fd02d9711928a477f5095d87b4c250fafff58cabac0bdd779d040
+PREV_BUNDLE=issuer-v1.2-r2   # rollback target
 RT=$BASE/runtime/node-$NODEV-linux-x64
 APP=$BASE/app/$BUNDLE
 NAME=oidc-issuer-staging
@@ -116,9 +121,9 @@ const db=Object.fromEntries(fs.readFileSync(dbf,'utf8').split('\n').filter(Boole
 const url=`postgresql://${encodeURIComponent(db.OIDC_DB_USER)}:${encodeURIComponent(db.OIDC_DB_PASSWORD)}@${dbhost}:5432/eoc_oidc`;
 const env=[
  '# Generated on this server. Never copy to git or chat.',
- '# OIDC_PRODUCTION_ENABLED=true is required by policy.mjs for the process to START at all; staging stays unexposed',
+ '# r3: OIDC_RUNTIME_ENABLED lets the process start; OIDC_LOGIN_ENABLED gates authentication (fail closed). Staging stays',
  '# because the issuer binds 127.0.0.1 only and has no nginx site until login-stg is certified.',
- 'OIDC_PRODUCTION_ENABLED=true',`OIDC_ISSUER=https://${host}/`,
+ 'OIDC_RUNTIME_ENABLED=true','OIDC_LOGIN_ENABLED=false',`OIDC_ISSUER=https://${host}/`,
  `OIDC_CLIENT_ID=${cs.OIDC_CLIENT_ID}`,`OIDC_CLIENT_SECRET=${cs.OIDC_CLIENT_SECRET}`,
  'OIDC_REDIRECT_URI=https://eoc-stg.tcdsolutionsgroup.com/api/eoc/auth/callback',
  `OIDC_JWKS_FILE=${sec}/private-signing-jwks.json`,`OIDC_COOKIE_KEYS=${cs.OIDC_COOKIE_KEYS}`,
@@ -166,13 +171,51 @@ verify)
   jw=$(curl -s -m 5 -H "$H" -H "$P" "$U/jwks" || true)
   ck "V7 JWKS public only (no d/p/q)" "$(echo "$jw" | "$RT/bin/node" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{const k=JSON.parse(s).keys;console.log(k.length>0&&k.every(x=>x.kty==="RSA"&&x.kid&&x.n&&!x.d&&!x.p&&!x.q)?"public "+k.length:"PRIVATE OR EMPTY")}catch{console.log("<no json>")}})')" "^public [1-9]"
   ck "V8 liveness" "$(curl -s -m 5 -H "$H" $U/internal/health/live)" '"alive":true'
-  ck "V9 readiness refuses: IAM not built yet (expected for now)" "$(curl -s -m 8 -o /dev/null -w '%{http_code}' -H "$H" $U/internal/health/ready)" "^(401|503)$"
+  ready=$(curl -s -m 8 -H "$H" $U/internal/health/ready)
+  ck "V9 readiness: ready through the issuer-only bridge identity, login disabled" "$ready" '"ready":true.*"iamBridge":true.*"loginEnabled":false'
   ck "V10 wrong Host refused" "$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H 'Host: evil.example' $U/.well-known/openid-configuration)" "^421$"
-  ck "V11 /auth without PKCE refused" "$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" "$U/auth?client_id=x&response_type=code&scope=openid")" "^(400|401)$"
+  CH=$(printf 'a%.0s' $(seq 43))
+  ck "V11 authorization denied (login disabled), even a well-formed request" "$(curl -s -m 5 -w ' %{http_code}' -H "$H" -H "$P" "$U/auth?client_id=x&response_type=code&scope=openid&code_challenge_method=S256&code_challenge=$CH&max_age=0&prompt=login&acr_values=urn:tcds:acr:phishing-resistant:uv")" 'LOGIN_DISABLED.* 503$'
+  ck "V14 token endpoint denied: no code exchange while disabled" "$(curl -s -m 5 -w ' %{http_code}' -H "$H" -H "$P" -X POST -d 'grant_type=authorization_code&code=abc&code_verifier=x' $U/token)" 'LOGIN_DISABLED.* 503$'
+  ck "V15 passkey interaction (begin/finish) denied" "$(curl -s -m 5 -w ' %{http_code}' -H "$H" -H "$P" $U/interaction/abcdefgh12)/$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" -H 'Origin: https://login-stg.tcdsolutionsgroup.com' -X POST -H 'content-type: application/json' -d '{}' $U/interaction/abcdefgh12/complete)" 'LOGIN_DISABLED.* 503/503$'
+  ck "V16 userinfo denied" "$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" $U/me)" "^503$"
+  ck "V17 started with runtime enabled + login gate DISABLED (log)" "$(grep -h 'login gate' "$BASE/issuer.out.log" 2>/dev/null | tail -1)" "login gate: DISABLED$"
+  ck "V18 no deprecated provider.app warning since restart" "$(cat "$BASE/issuer.err.log" "$BASE/issuer.out.log" 2>/dev/null | grep -ci deprecat || true)" "^0$"
   ck "V12 bound to loopback only" "$(ss -ltn | awk '$4 ~ /:8401$/{print $4}' | tr '\n' ' ')" "^127\.0\.0\.1:8401 ?$"
   ck "V13 process env carries no inherited DB/secret vars" "$(pid=$(pm2 pid $NAME | tail -1); tr '\0' '\n' < /proc/$pid/environ | cut -d= -f1 | grep -E '^(PG|OIDC_|IAM_|DATABASE_URL|STAGING_)' | tr '\n' ',' || true)" "^$"
+  # Bridge-side checks with the DEPLOYED client code (iam-verifier-client.mjs), through the real proxy + bridge.
+  bt() { (cd "$BASE/current" && env -i HOME="$HOME" PATH=/usr/bin:/bin BFF_KEY_FILE="$HOME/stg_login/config.json" "$RT/bin/node" --env-file="$SEC/issuer.env" --input-type=module -e "$1" 2>&1) | tail -1; }
+  BT_PRE='import {createIamVerifier,securePost} from "./src/iam-verifier-client.mjs";import fs from "node:fs";const E=process.env;const seen=[];const spy=async(u,o)=>{seen.push({u,o});return securePost(u,o)};'
+  ck "V19 issuer sends a UUID nonce, and the signed call succeeds" "$(bt "$BT_PRE"'try{await createIamVerifier(E,spy).readiness();const n=seen[0].o.headers["x-eoc-workload-nonce"];console.log(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(n)?"UUID OK":"NOT UUID "+n)}catch(e){console.log(e.message)}')" "^UUID OK$"
+  ck "V20 replayed nonce rejected (same signed request sent twice)" "$(bt "$BT_PRE"'await createIamVerifier(E,spy).readiness();try{await securePost(seen[0].u,seen[0].o);console.log("REPLAY ACCEPTED")}catch(e){console.log("replay "+e.message)}')" "^replay IAM_VERIFIER_DENIED$"
+  ck "V21 incorrect key rejected" "$(bt "$BT_PRE"'try{await createIamVerifier({...E,IAM_EOC_BRIDGE_KEY:"r".repeat(48)}).readiness();console.log("ACCEPTED")}catch(e){console.log(e.message)}')" "^IAM_VERIFIER_DENIED$"
+  ck "V22 issuer certificate + the BFF key rejected (key bound to identity)" "$(bt "$BT_PRE"'const k=JSON.parse(fs.readFileSync(E.BFF_KEY_FILE,"utf8")).api.EOC_IAM_SERVICE_TOKEN;try{await createIamVerifier({...E,IAM_EOC_BRIDGE_KEY:k}).readiness();console.log("ACCEPTED")}catch(e){console.log(e.message)}')" "^IAM_VERIFIER_DENIED$"
+  echo "Mismatched certificates (no cert, foreign CA, wrong CN, not allowlisted) and the unchanged EOC BFF path: run"
+  echo "  bash /tmp/recov15/mtls/stg_mtls.sh selftest   and   bash /tmp/recov15/stg_eoc64.sh test"
+  ;;
+upgrade)
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER" ] || { echo "set CONFIRM=UPGRADE-ISSUER"; exit 1; }
+  [ "$(grep -c '^OIDC_PRODUCTION_ENABLED=true$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env does not have exactly one OIDC_PRODUCTION_ENABLED=true line - stopping"; exit 1; }
+  grep -q '^OIDC_\(RUNTIME\|LOGIN\)_ENABLED=' "$SEC/issuer.env" && { echo "issuer.env already has the r3 settings - stopping"; exit 1; }
+  [ -e "$SEC/issuer.env.r2-backup" ] && { echo "$SEC/issuer.env.r2-backup exists - already upgraded?"; exit 1; }
+  bash "$0" install-app
+  install -m 600 "$SEC/issuer.env" "$SEC/issuer.env.r2-backup"
+  sed -i 's/^OIDC_PRODUCTION_ENABLED=true$/OIDC_RUNTIME_ENABLED=true\nOIDC_LOGIN_ENABLED=false/' "$SEC/issuer.env"
+  echo "issuer.env: $(grep -E '^OIDC_(RUNTIME|LOGIN|PRODUCTION)' "$SEC/issuer.env" | tr '\n' ' ')"
+  pm2 flush "$NAME" >/dev/null 2>&1 || true; : > "$BASE/issuer.out.log" 2>/dev/null || true; : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && grep -q 'login gate' "$BASE/issuer.out.log" 2>/dev/null && break; sleep 1; done
+  ss -ltn | grep -q '127.0.0.1:8401 ' || { echo "!! issuer not listening after upgrade - run: CONFIRM=ROLLBACK-ISSUER bash $0 rollback"; tail -20 "$BASE/issuer.err.log"; exit 1; }
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER" ] || { echo "set CONFIRM=ROLLBACK-ISSUER"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] && [ -f "$SEC/issuer.env.r2-backup" ] || { echo "r2 app or env backup missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; install -m 600 "$SEC/issuer.env.r2-backup" "$SEC/issuer.env"
+  clean_pm2 restart "$NAME" >/dev/null; sleep 3
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
   ;;
 stop)
   pm2 stop "$NAME" >/dev/null 2>&1 || true; pm2 delete "$NAME" >/dev/null 2>&1 || true; echo "issuer stopped and removed from PM2" ;;
-*) echo "usage: $0 check|install-runtime|install-app|secrets|start|verify|stop"; exit 2 ;;
+*) echo "usage: $0 check|install-runtime|install-app|secrets|start|verify|upgrade|rollback|stop"; exit 2 ;;
 esac
