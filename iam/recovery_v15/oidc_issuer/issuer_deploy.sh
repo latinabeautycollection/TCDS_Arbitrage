@@ -15,6 +15,9 @@
 #                    OIDC_PRODUCTION_ENABLED=true with OIDC_RUNTIME_ENABLED=true + OIDC_LOGIN_ENABLED=false (env backed
 #                    up), clear the issuer's PM2 logs, restart
 #   rollback         CONFIRM=ROLLBACK-ISSUER: back to r2 and the backed-up env, restart
+#   upgrade-r4       CONFIRM=UPGRADE-ISSUER-R4: r3 -> r4 (GET-only open paths; invalid OIDC_LOGIN_ENABLED refuses start),
+#                    env unchanged; returns to r3 automatically if the issuer does not come back
+#   rollback-r4      CONFIRM=ROLLBACK-ISSUER-R4: back to r3, restart
 # Usage: bash /tmp/recov15/oidc_issuer/issuer_deploy.sh <cmd>
 set -euo pipefail
 D=/tmp/recov15/oidc_issuer
@@ -22,9 +25,10 @@ BASE=/srv/arb-system/oidc_issuer
 SEC=/etc/tcds-issuer
 NODEV=v22.23.4
 NODE_SHA_X64=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce
-BUNDLE=issuer-v1.2-r3
-BUNDLE_SHA=11e75e87801fd02d9711928a477f5095d87b4c250fafff58cabac0bdd779d040
-PREV_BUNDLE=issuer-v1.2-r2   # rollback target
+BUNDLE=issuer-v1.2-r4
+BUNDLE_SHA=8db36a764f097074bfd6b234f2417f1ab7bf71159d516f5e35efe837da384e2c
+PREV_BUNDLE=issuer-v1.2-r3   # rollback-r4 target
+R2_BUNDLE=issuer-v1.2-r2     # the original r2 rollback (env backup issuer.env.r2-backup)
 RT=$BASE/runtime/node-$NODEV-linux-x64
 APP=$BASE/app/$BUNDLE
 NAME=oidc-issuer-staging
@@ -68,7 +72,7 @@ install-app)
   PATH="$RT/bin:/usr/bin:/bin" npm ls oidc-provider pg 2>/dev/null | tail -3
   for f in src/server.mjs src/security-v11.mjs src/iam-verifier-client.mjs src/pg-adapter.mjs src/central-iam-route-adapter.mjs deploy/issuer-passkey-mtls-proxy.cjs; do "$RT/bin/node" --check "$f"; done
   echo "syntax check OK"
-  "$RT/bin/node" --test tests/*.test.mjs 2>&1 | grep -E '^# (tests|pass|fail)'
+  "$RT/bin/node" --test tests/*.test.mjs 2>&1 | grep -E '^(# |ℹ )(tests|pass|fail)'
   ln -sfn "$APP" "$BASE/current"
   echo "app installed at $APP"
   ;;
@@ -179,6 +183,7 @@ verify)
   ck "V14 token endpoint denied: no code exchange while disabled" "$(curl -s -m 5 -w ' %{http_code}' -H "$H" -H "$P" -X POST -d 'grant_type=authorization_code&code=abc&code_verifier=x' $U/token)" 'LOGIN_DISABLED.* 503$'
   ck "V15 passkey interaction (begin/finish) denied" "$(curl -s -m 5 -w ' %{http_code}' -H "$H" -H "$P" $U/interaction/abcdefgh12)/$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" -H 'Origin: https://login-stg.tcdsolutionsgroup.com' -X POST -H 'content-type: application/json' -d '{}' $U/interaction/abcdefgh12/complete)" 'LOGIN_DISABLED.* 503/503$'
   ck "V16 userinfo denied" "$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" $U/me)" "^503$"
+  ck "V23 (r4) open paths only for GET: POST discovery / POST jwks denied" "$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" -X POST $U/.well-known/openid-configuration)/$(curl -s -m 5 -o /dev/null -w '%{http_code}' -H "$H" -H "$P" -X POST $U/jwks)" "^503/503$"
   ck "V17 started with runtime enabled + login gate DISABLED (log)" "$(grep -h 'login gate' "$BASE/issuer.out.log" 2>/dev/null | tail -1)" "login gate: DISABLED$"
   ck "V18 no deprecated provider.app warning since restart" "$(cat "$BASE/issuer.err.log" "$BASE/issuer.out.log" 2>/dev/null | grep -ci deprecat || true)" "^0$"
   ck "V12 bound to loopback only" "$(ss -ltn | awk '$4 ~ /:8401$/{print $4}' | tr '\n' ' ')" "^127\.0\.0\.1:8401 ?$"
@@ -210,12 +215,36 @@ upgrade)
   ;;
 rollback)
   [ "${CONFIRM:-}" = "ROLLBACK-ISSUER" ] || { echo "set CONFIRM=ROLLBACK-ISSUER"; exit 1; }
-  [ -d "$BASE/app/$PREV_BUNDLE" ] && [ -f "$SEC/issuer.env.r2-backup" ] || { echo "r2 app or env backup missing - stopping"; exit 1; }
-  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; install -m 600 "$SEC/issuer.env.r2-backup" "$SEC/issuer.env"
+  [ -d "$BASE/app/$R2_BUNDLE" ] && [ -f "$SEC/issuer.env.r2-backup" ] || { echo "r2 app or env backup missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$R2_BUNDLE" "$BASE/current"; install -m 600 "$SEC/issuer.env.r2-backup" "$SEC/issuer.env"
   clean_pm2 restart "$NAME" >/dev/null; sleep 3
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $R2_BUNDLE" || echo "!! issuer not listening after rollback"
+  ;;
+upgrade-r4)
+  # r3 -> r4: GET-only for the paths served while login is disabled; refuse to start on an invalid OIDC_LOGIN_ENABLED.
+  # issuer.env is not changed (r3 already set OIDC_RUNTIME_ENABLED=true + OIDC_LOGIN_ENABLED=false).
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER-R4" ] || { echo "set CONFIRM=UPGRADE-ISSUER-R4"; exit 1; }
+  [ "$(readlink -f "$BASE/current")" = "$BASE/app/$PREV_BUNDLE" ] || { echo "current is not $PREV_BUNDLE - stopping"; exit 1; }
+  [ "$(grep -c '^OIDC_LOGIN_ENABLED=\(true\|false\)$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env needs exactly one OIDC_LOGIN_ENABLED=true|false line (r4 refuses anything else) - stopping"; exit 1; }
+  grep -q '^OIDC_LOGIN_ENABLED=false$' "$SEC/issuer.env" || { echo "staging must keep OIDC_LOGIN_ENABLED=false - stopping"; exit 1; }
+  bash "$0" install-app
+  pm2 flush "$NAME" >/dev/null 2>&1 || true; : > "$BASE/issuer.out.log" 2>/dev/null || true; : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && grep -q 'login gate' "$BASE/issuer.out.log" 2>/dev/null && break; sleep 1; done
+  if ! ss -ltn | grep -q '127.0.0.1:8401 '; then
+    echo "!! issuer not listening after r4 - returning to $PREV_BUNDLE"; tail -5 "$BASE/issuer.err.log" 2>/dev/null
+    ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+    ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
+  fi
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback-r4)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R4" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R4"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] || { echo "$PREV_BUNDLE missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
   ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
   ;;
 stop)
   pm2 stop "$NAME" >/dev/null 2>&1 || true; pm2 delete "$NAME" >/dev/null 2>&1 || true; echo "issuer stopped and removed from PM2" ;;
-*) echo "usage: $0 check|install-runtime|install-app|secrets|start|verify|upgrade|rollback|stop"; exit 2 ;;
+*) echo "usage: $0 check|install-runtime|install-app|secrets|start|verify|upgrade|rollback|upgrade-r4|rollback-r4|stop"; exit 2 ;;
 esac
