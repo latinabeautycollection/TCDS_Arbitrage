@@ -1,0 +1,75 @@
+diff --git a/a/src/policy.mjs b/b/src/policy.mjs
+index b54c41c..fbc63fd 100644
+--- a/a/src/policy.mjs
++++ b/b/src/policy.mjs
+@@ -13,6 +13,9 @@ export function requiredEnv(env){
+  if(!env.IAM_CA_FILE||!env.IAM_CLIENT_CERT||!env.IAM_CLIENT_KEY)throw Error('MTLS_CONFIGURATION_REQUIRED');
+  // FIX 1: two settings. OIDC_RUNTIME_ENABLED gates process start; OIDC_LOGIN_ENABLED gates authentication.
+  if(env.OIDC_RUNTIME_ENABLED!=='true')throw Error('ISSUER_RUNTIME_DISABLED');
++ // r4 (from the dev team's V1.4): a value that is neither 'true' nor 'false' is a misconfiguration, so refuse to
++ // start rather than guess. A missing value still starts with login disabled (and a warning).
++ if(env.OIDC_LOGIN_ENABLED!==undefined&&!['true','false'].includes(env.OIDC_LOGIN_ENABLED))throw Error('OIDC_LOGIN_FLAG_INVALID');
+  return {issuer:issuer.origin,redirect:redirect.href,login:loginSetting(env)};
+ }
+ // Login gate. Fail closed: only the exact string 'true' enables authentication; missing or any other value disables
+@@ -24,6 +27,9 @@ export function loginSetting(env){
+ // While login is disabled only these paths are served; everything else (authorization, token, interaction/passkey,
+ // userinfo, end-session, revocation) is refused before it reaches oidc-provider.
+ export const PATHS_WHEN_LOGIN_DISABLED=Object.freeze(new Set(['/.well-known/openid-configuration','/jwks','/internal/health/live','/internal/health/ready']));
++// r4 (from the dev team's V1.4): those paths are served only to GET while login is disabled; any other method on them
++// is refused like every other route.
++export function servedWhileLoginDisabled(method,path){return method==='GET'&&PATHS_WHEN_LOGIN_DISABLED.has(path)}
+ export function assertPkce(params){
+  if(params.response_type!=='code'||params.code_challenge_method!=='S256'||typeof params.code_challenge!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(params.code_challenge))throw Error('PKCE_S256_REQUIRED');
+  if(!String(params.scope||'').split(/\s+/).includes('openid'))throw Error('OPENID_SCOPE_REQUIRED');
+diff --git a/a/src/server.mjs b/b/src/server.mjs
+index 898c25d..d349d22 100644
+--- a/a/src/server.mjs
++++ b/b/src/server.mjs
+@@ -4,7 +4,7 @@ import {randomUUID,randomBytes} from 'node:crypto';
+ import {csrfToken, parseIssuerCookies, sameOriginRequest, validatedIssuerKeys} from './security-v11.mjs';
+ import pg from 'pg';
+ import Provider from 'oidc-provider';
+-import {requiredEnv,assertPkce,assertFreshOidcRequest,REQUIRED_ACR,constantEqual,hashHex,safeUid,PATHS_WHEN_LOGIN_DISABLED} from './policy.mjs';
++import {requiredEnv,assertPkce,assertFreshOidcRequest,REQUIRED_ACR,constantEqual,hashHex,safeUid,servedWhileLoginDisabled} from './policy.mjs';
+ import {createAdapterFactory} from './pg-adapter.mjs';
+ import {createIamVerifier} from './iam-verifier-client.mjs';
+ const env=process.env;
+@@ -117,7 +117,7 @@ const server=createServer(async(req,res)=>{
+   const u=new URL(req.url,issuer);
+   if(req.headers.host!==allowedHost)return safeJson(res,421,{error:'INVALID_HOST'});
+   // FIX 1: server-side login gate, checked before any OIDC route (authorization, token, interaction, passkey).
+-  if(!login.enabled&&!PATHS_WHEN_LOGIN_DISABLED.has(u.pathname))return safeJson(res,503,{error:'LOGIN_DISABLED'});
++  if(!login.enabled&&!servedWhileLoginDisabled(req.method,u.pathname))return safeJson(res,503,{error:'LOGIN_DISABLED'});
+   if(u.pathname==='/internal/health/live')return safeJson(res,200,{alive:true});
+   if(u.pathname==='/internal/health/ready'){
+    await pool.query('SELECT 1 FROM eoc_oidc.artifacts LIMIT 1');await verifier.readiness();return safeJson(res,200,{ready:true,database:true,iamBridge:true,issuerConfigured:true,loginEnabled:login.enabled,certified:false});
+diff --git a/b/tests/r4-hardening.test.mjs b/b/tests/r4-hardening.test.mjs
+new file mode 100644
+index 0000000..a7ee30b
+--- /dev/null
++++ b/b/tests/r4-hardening.test.mjs
+@@ -0,0 +1,23 @@
++import test from 'node:test';import assert from 'node:assert/strict';
++import {requiredEnv,servedWhileLoginDisabled,PATHS_WHEN_LOGIN_DISABLED} from '../src/policy.mjs';
++
++// r4 hardening adopted from the dev team's V1.4 login-gate.mjs (on top of r3, which already met the three fixes).
++const base={OIDC_RUNTIME_ENABLED:'true',OIDC_ISSUER:'https://login-stg.tcdsolutionsgroup.com/',OIDC_CLIENT_ID:'tcds-eoc-stg',OIDC_CLIENT_SECRET:'a'.repeat(48),
++ OIDC_REDIRECT_URI:'https://eoc-stg.tcdsolutionsgroup.com/api/eoc/auth/callback',OIDC_JWKS_FILE:'/tmp/key',OIDC_DB_CA_FILE:'ca',OIDC_COOKIE_KEYS:'a'.repeat(40)+','+'b'.repeat(40),
++ OIDC_DATABASE_URL:'postgresql://user:password@issuer-db.internal/issuer',IAM_PASSKEY_API_URL:'https://iam-internal-stg.tcdsolutionsgroup.com',IAM_WORKLOAD_KEY:'d'.repeat(40),
++ IAM_EOC_BRIDGE_KEY:'f'.repeat(40),OIDC_PASSKEY_SIGNING_KEY:'e'.repeat(40),IAM_CA_FILE:'ca',IAM_CLIENT_CERT:'cert',IAM_CLIENT_KEY:'key'};
++
++for(const v of ['','TRUE','True','yes','1',' true','true ','false ','FALSE','off'])
++ test(`r4: OIDC_LOGIN_ENABLED=${JSON.stringify(v)} refuses to start (OIDC_LOGIN_FLAG_INVALID)`,()=>
++  assert.throws(()=>requiredEnv({...base,OIDC_LOGIN_ENABLED:v}),/OIDC_LOGIN_FLAG_INVALID/));
++test('r4: "false" starts with login disabled',()=>{const r=requiredEnv({...base,OIDC_LOGIN_ENABLED:'false'});assert.equal(r.login.enabled,false);assert.equal(r.login.valid,true)});
++test('r4: "true" starts with login enabled',()=>assert.equal(requiredEnv({...base,OIDC_LOGIN_ENABLED:'true'}).login.enabled,true));
++test('r4: missing still starts, login disabled (flagged invalid, warning)',()=>{const r=requiredEnv(base);assert.equal(r.login.enabled,false);assert.equal(r.login.valid,false)});
++
++for(const p of PATHS_WHEN_LOGIN_DISABLED){
++ test(`r4: GET ${p} is served while login is disabled`,()=>assert.equal(servedWhileLoginDisabled('GET',p),true));
++ for(const m of ['POST','PUT','PATCH','DELETE','HEAD','OPTIONS'])
++  test(`r4: ${m} ${p} is refused while login is disabled`,()=>assert.equal(servedWhileLoginDisabled(m,p),false));
++}
++for(const p of ['/auth','/token','/me','/session/end','/interaction/abcdefgh','/.well-known/openid-configuration/','/jwks/','/internal/health'])
++ test(`r4: GET ${p} is refused while login is disabled`,()=>assert.equal(servedWhileLoginDisabled('GET',p),false));

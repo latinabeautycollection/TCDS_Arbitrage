@@ -1,6 +1,21 @@
 # Central OIDC issuer (Domain 6.4 V1.2): staging deployment
 
-**Current bundle: `issuer-v1.2-r3.tgz`** = r2 + the dev team's three fixes (`issuer-v1.2-r3-fixes.patch`):
+**Current bundle: `issuer-v1.2-r4.tgz`** = r3 + two stricter points taken from the dev team's V1.4
+(`issuer-v1.2-r4-fixes.patch`, apply with `git apply -p2`):
+1. While login is disabled, discovery, JWKS and the two health checks are served to **GET only**; any other method on
+   them gets 503 `LOGIN_DISABLED` like every other route.
+2. An `OIDC_LOGIN_ENABLED` value other than exactly `true` / `false` **refuses to start** (`OIDC_LOGIN_FLAG_INVALID`).
+   A missing value still starts with login disabled and a warning.
+
+V1.4's own `policy.mjs`/`server.mjs`/`login-gate.mjs` were not adopted: r3 already met the three fixes, and V1.4 drops
+r3's defence in depth (no account lookup and no passkey begin/complete while disabled) and reports
+`/internal/health/ready` as not ready while login is disabled. `iam-verifier-client.mjs` and `package.json` are
+byte-identical in both. Tests 203/203 (r3's 154 + 49). Staging 2026-11-17: `issuer_deploy.sh upgrade-r4`, verify 23/23.
+`rollback-r4` returns to r3.
+
+---
+
+Previous: **`issuer-v1.2-r3.tgz`** = r2 + the dev team's three fixes (`issuer-v1.2-r3-fixes.patch`):
 1. `OIDC_PRODUCTION_ENABLED` replaced by `OIDC_RUNTIME_ENABLED` (process start) and `OIDC_LOGIN_ENABLED` (authentication,
    fail closed: only the exact string `true` enables it). While disabled, only discovery, JWKS and the two health checks
    are served; authorization, token, interaction/passkey, userinfo and every other route get 503 `LOGIN_DISABLED`, and
