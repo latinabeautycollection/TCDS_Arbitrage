@@ -55,10 +55,18 @@ which the database does not condition on readiness; `stationReadiness` is in the
     apply (auto-restore on any failed probe), nginx (`/api/v1/packing/`, `/api/v1/shipments/` → :8095 with the
     `/api/v1/auth/` block's proxy settings; any other `/api/` → JSON 404), rollback, nginx-rollback, status.
 
+15. **Gate states (after the first live read, 2026-11-17).** A fresh task showed CONTENTS and OUTBOUND as FAIL
+    because every `packship__blockers` code counted as a failure. Now only real problems are FAIL (ITEM_ON_HOLD,
+    ITEM_NOT_PACKABLE, EXCEPTION_OPEN, rejected evidence, and any blocker code not known to the mapper); the six
+    "not done yet" codes (SOURCE_UNVERIFIED, ITEMS_UNVERIFIED, PACKAGE_MISSING, WEIGHT_MISSING, DIMENSIONS_MISSING,
+    EVIDENCE_PENDING) show PENDING. PASS rules are unchanged. Deploy script: preflight/apply accept the original or
+    this package's host (routes-only update); a failed apply and `rollback` restore host AND routes from before the
+    last apply.
+
 ## Verification
 - `tsc 5.8.3 --strict` against real `express@5.1.0` / `@types/express@5.0.3` / `pg@8.16.3` types: clean.
-- Jest: 56/56. Mount 24 (new: real Express 5 app + byte copy of the deployed 6.1B `security.ts`, fake pools),
-  mapper 14 (new, including "a fully verified LABEL_VERIFIED task passes every blocking gate"), capture evidence 7 (the V1.2 fixture updated to V1.5's camera rule, plus 3 new
+- Jest: 60/60. Mount 24 (new: real Express 5 app + byte copy of the deployed 6.1B `security.ts`, fake pools),
+  mapper 18 (new, including "a fully verified LABEL_VERIFIED task passes every blocking gate"), capture evidence 7 (the V1.2 fixture updated to V1.5's camera rule, plus 3 new
   refusals), validation, response binding, route service and route ownership unchanged.
 - Not done here: mounting in `src/server.ts`, the identity adapter, a role-bound runtime test, the PWA build.
 
