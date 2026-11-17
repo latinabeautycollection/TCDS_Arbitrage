@@ -21,7 +21,7 @@ CAND=$LV/candidate
 VHOST=/etc/nginx/sites-enabled/warehouse-app.tcdsolutionsgroup.com
 PUBLIC=https://warehouse-app.tcdsolutionsgroup.com
 ORIG_HOST_SHA16=1264a0a0a203919c          # the deployed host before this change (inspect_loginv2.sh, 2026-11-17)
-SUMS_SHA=e7535256ae3b254899df5c96a0e79fa62830d6aedad948d63e20100380416be7
+SUMS_SHA=fda2acec3cafa1273fb51f4e52fa2162a3a1e5e79ef6a99874cf2355ccb79e16
 UUID=00000000-0000-4000-8000-000000000000
 umask 077
 
@@ -52,6 +52,7 @@ probes() {   # $1 = base URL
   probe "P7 claim with a CSRF token the database rejects -> 403" 403 '{"code":"CSRF_REJECTED"}' -X POST -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -H "Cookie: __Host-tcds_session=not-a-session; __Host-tcds_csrf=not-a-token" -H 'x-csrf-token: not-a-token' -d '{}' "$u/api/v1/packing/tasks/$UUID/claim"
   probe "P8 outbound-stage without session -> 401" 401 '{"code":"PACKSHIP_SESSION_INVALID"}' -X POST -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{}' "$u/api/v1/shipments/$UUID/outbound-stage"
   probe "P9 unknown Pack/Ship path -> 404 {code}" 404 '{"code":"NOT_FOUND"}' "$u/api/v1/packing/nope"
+  probe "P10 capture snapshot without session -> 401" 401 '{"code":"AUTH_REQUIRED"}' "$u/api/v1/warehouse-control/scanner/capture-snapshot"
 }
 host_known() {   # live host is the original, or this package's own host (an update of the routes only)
   local h; h=$(sha256sum "$HOST" | cut -c1-16)
@@ -115,7 +116,7 @@ apply)
     FAILS=0; wait_listen 8095 25 && probe "R1 sign-in after restore" 401 '~"SESSION_INVALID"' http://127.0.0.1:8095/api/v1/auth/session
     echo "RESTORED (sign-in probe failures: $FAILS)"; exit 1
   fi
-  echo "APPLY PASSED - Pack/Ship live on :8095 (nginx not routed yet: run 'nginx')" ;;
+  echo "APPLY PASSED - live on :8095 (nginx: 'nginx' on first install only; 'nginx-capture' once for the capture snapshot)" ;;
 
 nginx)
   [ "${CONFIRM:-}" = "NGINX-PACKSHIP" ] || { echo "set CONFIRM=NGINX-PACKSHIP"; exit 1; }
@@ -162,5 +163,29 @@ status)
   pm2 logs login-v2-api --nostream --lines 60 2>/dev/null | grep -oE '"msg":"(packship routes mounted|login v2 identity api listening|startup failed|packship pg pool error)"' | sort | uniq -c
   probes http://127.0.0.1:8095; echo "failed: $FAILS" ;;
 
-*) echo "usage: $0 preflight|apply|nginx|rollback|nginx-rollback|status"; exit 2 ;;
+nginx-capture)
+  # Adds ONLY /api/v1/warehouse-control/ -> :8095 (same proxy settings as /api/v1/auth/). Same backup / nginx -t gate.
+  [ "${CONFIRM:-}" = "NGINX-CAPTURE" ] || { echo "set CONFIRM=NGINX-CAPTURE"; exit 1; }
+  grep -q 'location ^~ /api/v1/warehouse-control/' "$VHOST" && { echo "vhost already routes /api/v1/warehouse-control/ - stopping"; exit 1; }
+  TS=$(date -u +%Y%m%dT%H%M%SZ); BK=/etc/nginx/vhost-backups/warehouse-app.bak-packship-$TS
+  sudo mkdir -p /etc/nginx/vhost-backups && sudo cp -p "$(readlink -f "$VHOST")" "$BK" || exit 1
+  NEW=$(mktemp); sudo cat "$VHOST" | python3 -I -c '
+import sys,re
+s=sys.stdin.read()
+m=re.search(r"( *)location \^~ /api/v1/auth/ \{.*?\n\1\}\n", s, re.S)
+if not m: sys.exit("auth location block not found")
+add=m.group(0).replace("/api/v1/auth/","/api/v1/warehouse-control/")
+i=s.index(m.group(1)+"location / {")
+sys.stdout.write(s[:i]+add+s[i:])' > "$NEW" || { rm -f "$NEW"; echo "vhost edit failed - nothing changed"; exit 1; }
+  echo "--- vhost diff"; diff -u "$BK" "$NEW" | sed -n '1,30p'
+  sudo cp "$NEW" "$(readlink -f "$VHOST")"; rm -f "$NEW"
+  if ! sudo nginx -t >/dev/null 2>&1; then sudo cp -p "$BK" "$(readlink -f "$VHOST")"; echo "nginx -t FAILED - vhost restored, not reloaded"; exit 1; fi
+  sudo systemctl reload nginx && echo "nginx reloaded; backup $BK"; sleep 1
+  probe "N7 public capture snapshot reaches :8095 (no session -> 401)" 401 '{"code":"AUTH_REQUIRED"}' "$PUBLIC/api/v1/warehouse-control/scanner/capture-snapshot"
+  probe "N8 other warehouse-control paths -> JSON 404" 404 '{"code":"NOT_FOUND"}' "$PUBLIC/api/v1/warehouse-control/nope"
+  probe "N9 sign-in unchanged" 401 '~"SESSION_INVALID"' "$PUBLIC/api/v1/auth/session"
+  probe "N10 Pack/Ship unchanged" 401 '{"code":"PACKSHIP_SESSION_INVALID"}' "$PUBLIC/api/v1/packing/tasks/$UUID"
+  [ $FAILS = 0 ] && echo "NGINX-CAPTURE PASSED" || echo "NGINX-CAPTURE: $FAILS probe(s) failed - restore with: CONFIRM=ROLLBACK-NGINX-PACKSHIP bash $0 nginx-rollback" ;;
+
+*) echo "usage: $0 preflight|apply|nginx|nginx-capture|rollback|nginx-rollback|status"; exit 2 ;;
 esac

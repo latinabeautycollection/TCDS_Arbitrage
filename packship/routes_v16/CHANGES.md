@@ -63,6 +63,16 @@ which the database does not condition on readiness; `stationReadiness` is in the
     this package's host (routes-only update); a failed apply and `rollback` restore host AND routes from before the
     last apply.
 
+16. **Capture snapshot endpoint** (ours per the dev team's note to Sourabh, 2026-11-17):
+    `GET /api/v1/warehouse-control/scanner/capture-snapshot` on the same host. Database: `930`
+    `warehouse_control.get_capture_authority_snapshot_v1(device, facility)` implements scanner contract v1.0 §4
+    (device-bound profile first, then the facility default; unusable device asset → 404 with no fallback; two
+    facility defaults → 409; never a guess), executable only by new role `tcds_scanner_snapshot_api`, granted to
+    `tcds_login_packship`. Response in PR #13's shape (`scannerProfile` + `symbologies` at the top level) plus `meta`
+    (contractVersion 2.0, asset, binding, contentHash = ETag, If-None-Match → 304). Device and facility come from the
+    session envelope only. Any valid unrestricted session (not PACKSHIP_PACK: it serves every scanner workflow).
+    Proven against PR #13's own decoder + validator (verbatim copies) with the real 930 output.
+
 ## Verification
 - `tsc 5.8.3 --strict` against real `express@5.1.0` / `@types/express@5.0.3` / `pg@8.16.3` types: clean.
 - Jest: 60/60. Mount 24 (new: real Express 5 app + byte copy of the deployed 6.1B `security.ts`, fake pools),
