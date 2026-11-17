@@ -13,6 +13,11 @@ export class PackShipTaskResponseMapper {
   }
 }
 
+/** packship__blockers codes that only mean "this step has not been done yet". Everything else is a problem. */
+export const PROGRESS_BLOCKERS: ReadonlySet<string> = new Set([
+  "SOURCE_UNVERIFIED", "ITEMS_UNVERIFIED", "PACKAGE_MISSING", "WEIGHT_MISSING", "DIMENSIONS_MISSING", "EVIDENCE_PENDING",
+]);
+
 export function mapSnapshot(snapshot: V02TaskSnapshot): Record<string, unknown> {
   validateSnapshot(snapshot);
   const s = snapshot;
@@ -39,8 +44,13 @@ export function mapSnapshot(snapshot: V02TaskSnapshot): Record<string, unknown> 
     ? ev.required > 0 && ev.pending === 0 && ev.accepted >= ev.required && ev.integrityVerified === true
     : reachedEvidenceStep);
 
-  const gate = (code: string, label: string, pass: boolean, blocked: boolean, stage: string) => ({
-    code, label, state: blocked ? "FAIL" : pass ? "PASS" : "PENDING", blocking: true, stage,
+  // packship__blockers mixes "this step is not done yet" with real problems. Only problems are FAIL; progress
+  // blockers show PENDING, so a fresh task is not painted red. Any blocker code not listed here is treated as a
+  // problem (fail closed: it can never look harmless).
+  const problems = [...blocker].filter(b => !PROGRESS_BLOCKERS.has(b));
+  const itemProblem = blocker.has("ITEM_NOT_PACKABLE") || blocker.has("ITEM_ON_HOLD");
+  const gate = (code: string, label: string, pass: boolean, failed: boolean, stage: string) => ({
+    code, label, state: failed ? "FAIL" : pass ? "PASS" : "PENDING", blocking: true, stage,
   });
   const labelVerified = s.status === "LABEL_VERIFIED" || s.status === "OUTBOUND_STAGED";
   // OUTBOUND mirrors warehouse.packship_stage_outbound_v2's own precondition (status LABEL_VERIFIED, claim held by
@@ -48,13 +58,11 @@ export function mapSnapshot(snapshot: V02TaskSnapshot): Record<string, unknown> 
   const outboundAllowed = s.status === "OUTBOUND_STAGED" ||
     (s.status === "LABEL_VERIFIED" && s.claim?.heldBySession === true && blocker.size === 0);
   const gates = [
-    gate("CONTENTS", "Contents verified", itemVerified,
-      blocker.has("ITEMS_UNVERIFIED") || blocker.has("ITEM_NOT_PACKABLE") || blocker.has("ITEM_ON_HOLD"), "CONTENTS"),
-    gate("MEASUREMENTS", "Measurements complete", measured,
-      blocker.has("WEIGHT_MISSING") || blocker.has("DIMENSIONS_MISSING"), "MEASUREMENTS"),
-    gate("EVIDENCE", "Evidence accepted", evidencePassed, blocker.has("EVIDENCE_PENDING") || ev.rejected > 0, "EVIDENCE"),
+    gate("CONTENTS", "Contents verified", itemVerified && !itemProblem, itemProblem, "CONTENTS"),
+    gate("MEASUREMENTS", "Measurements complete", measured, false, "MEASUREMENTS"),
+    gate("EVIDENCE", "Evidence accepted", evidencePassed, ev.rejected > 0, "EVIDENCE"),
     gate("LABEL", "Carrier label verified", labelVerified, false, "LABEL"),
-    gate("OUTBOUND", "Ready for outbound staging", outboundAllowed, blocker.size > 0, "OUTBOUND"),
+    gate("OUTBOUND", "Ready for outbound staging", outboundAllowed, problems.length > 0, "OUTBOUND"),
   ];
   if (blocker.has("EXCEPTION_OPEN")) for (const g of gates) if (g.state === "PASS") g.state = "FAIL";
 

@@ -21,7 +21,7 @@ CAND=$LV/candidate
 VHOST=/etc/nginx/sites-enabled/warehouse-app.tcdsolutionsgroup.com
 PUBLIC=https://warehouse-app.tcdsolutionsgroup.com
 ORIG_HOST_SHA16=1264a0a0a203919c          # the deployed host before this change (inspect_loginv2.sh, 2026-11-17)
-SUMS_SHA=1a1d9c6878d7559ed4470ba636d0861541b5b5beea87a3fec85388f26aff250e
+SUMS_SHA=e7535256ae3b254899df5c96a0e79fa62830d6aedad948d63e20100380416be7
 UUID=00000000-0000-4000-8000-000000000000
 umask 077
 
@@ -53,6 +53,16 @@ probes() {   # $1 = base URL
   probe "P8 outbound-stage without session -> 401" 401 '{"code":"PACKSHIP_SESSION_INVALID"}' -X POST -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{}' "$u/api/v1/shipments/$UUID/outbound-stage"
   probe "P9 unknown Pack/Ship path -> 404 {code}" 404 '{"code":"NOT_FOUND"}' "$u/api/v1/packing/nope"
 }
+host_known() {   # live host is the original, or this package's own host (an update of the routes only)
+  local h; h=$(sha256sum "$HOST" | cut -c1-16)
+  [ "$h" = "$ORIG_HOST_SHA16" ] || [ "$h" = "$(sha256sum "$PKG/host/identity-api-host.cjs" | cut -c1-16)" ]
+}
+restore_apply() {  # $1 = apply timestamp: put back the host file AND the routes directory from before that apply
+  cp -p "$HOST.bak-packship-$1" "$HOST"
+  rm -rf "$LV/packship"
+  [ -e "$LV/packship.bak-$1" ] && mv "$LV/packship.bak-$1" "$LV/packship"
+  return 0
+}
 wait_listen() {  # $1 port, $2 seconds
   for _ in $(seq 1 "$2"); do curl -s -m 2 -o /dev/null "http://127.0.0.1:$1/api/v1/auth/bootstrap" && return 0; sleep 1; done; return 1
 }
@@ -60,7 +70,7 @@ wait_listen() {  # $1 port, $2 seconds
 case "${1:-}" in
 preflight)
   echo "== preflight (no live change)"
-  [ "$(sha256sum "$HOST" | cut -c1-16)" = "$ORIG_HOST_SHA16" ] || { echo "live host is not the version this was built against - stopping"; exit 1; }
+  host_known || { echo "live host is neither the original nor this package's host - stopping"; exit 1; }
   node -e 'const c=require(process.argv[1]);if(!c.packship||!c.packship.DATABASE_URL)throw Error("config.json has no packship.DATABASE_URL (run packship_login.sh create)")' "$LV/config.json" || exit 1
   node -e 'const s=require(process.argv[1]);const need=["requestIds","securityHeaders","noStore","exactOrigin","fetchMetadataGuard","requireCsrf","cookie"];
     const miss=need.filter(k=>typeof s[k]!=="function");if(miss.length)throw Error("6.1B security.js lacks: "+miss);console.log("6.1B security exports: ok")' "$B/dist/express/security" || exit 1
@@ -87,20 +97,21 @@ apply)
   [ "${CONFIRM:-}" = "DEPLOY-PACKSHIP-ROUTES" ] || { echo "set CONFIRM=DEPLOY-PACKSHIP-ROUTES"; exit 1; }
   [ -f "$CAND/PREFLIGHT_OK" ] || { echo "run preflight first"; exit 1; }
   [ $(( $(date -u +%s) - $(cat "$CAND/PREFLIGHT_OK") )) -lt 3600 ] || { echo "preflight is older than 1 hour - run it again"; exit 1; }
-  [ "$(sha256sum "$HOST" | cut -c1-16)" = "$ORIG_HOST_SHA16" ] || { echo "live host changed since preflight - stopping"; exit 1; }
+  host_known || { echo "live host is neither the original nor this package's host - stopping"; exit 1; }
   TS=$(date -u +%Y%m%dT%H%M%SZ)
   cp -p "$HOST" "$HOST.bak-packship-$TS"
   [ -e "$LV/packship" ] && mv "$LV/packship" "$LV/packship.bak-$TS"
   mkdir -p "$LV/packship"; cp -R "$CAND/packship/dist" "$LV/packship/dist"; ln -s "$B/node_modules" "$LV/packship/node_modules"
   cp "$CAND/runtime/identity-api-host.cjs" "$HOST"
-  echo "installed; host backup $HOST.bak-packship-$TS"
+  echo "$TS" > "$LV/.packship_last_apply"
+  echo "installed; host backup $HOST.bak-packship-$TS$( [ -e "$LV/packship.bak-$TS" ] && echo ", routes backup $LV/packship.bak-$TS")"
   pm2 reload login-v2-api >/dev/null 2>&1; sleep 2
   if wait_listen 8095 25; then probes http://127.0.0.1:8095; else echo "FAIL login-v2-api did not come back"; FAILS=1; fi
   if pm2 logs login-v2-api --nostream --lines 40 2>/dev/null | grep -q '"msg":"packship routes mounted"'; then echo "PASS log: packship routes mounted"
   else echo "FAIL log line 'packship routes mounted' not found"; FAILS=$((FAILS+1)); fi
   if [ $FAILS != 0 ]; then
-    echo "!! $FAILS failed - restoring the previous host"
-    cp -p "$HOST.bak-packship-$TS" "$HOST"; pm2 reload login-v2-api >/dev/null 2>&1; sleep 2
+    echo "!! $FAILS failed - restoring the previous host and routes"
+    restore_apply "$TS"; pm2 reload login-v2-api >/dev/null 2>&1; sleep 2
     FAILS=0; wait_listen 8095 25 && probe "R1 sign-in after restore" 401 '~"SESSION_INVALID"' http://127.0.0.1:8095/api/v1/auth/session
     echo "RESTORED (sign-in probe failures: $FAILS)"; exit 1
   fi
@@ -136,10 +147,10 @@ sys.stdout.write(s[:i]+add+s[i:])' > "$NEW" || { rm -f "$NEW"; echo "vhost edit 
 
 rollback)
   [ "${CONFIRM:-}" = "ROLLBACK-PACKSHIP-ROUTES" ] || { echo "set CONFIRM=ROLLBACK-PACKSHIP-ROUTES"; exit 1; }
-  BK=$(ls -t "$HOST".bak-packship-* 2>/dev/null | head -1); [ -n "$BK" ] || { echo "no host backup"; exit 1; }
-  cp -p "$BK" "$HOST"; pm2 reload login-v2-api >/dev/null 2>&1; sleep 2
+  TS=$(cat "$LV/.packship_last_apply" 2>/dev/null); [ -n "$TS" ] && [ -f "$HOST.bak-packship-$TS" ] || { echo "no recorded last apply to undo"; exit 1; }
+  restore_apply "$TS"; rm -f "$LV/.packship_last_apply"; pm2 reload login-v2-api >/dev/null 2>&1; sleep 2
   wait_listen 8095 25 && probe "sign-in after rollback" 401 '~"SESSION_INVALID"' http://127.0.0.1:8095/api/v1/auth/session
-  echo "host restored from $BK (Pack/Ship routes off; nginx paths now get the host 404)" ;;
+  echo "undid the apply of $TS: host and routes restored to what they were before it" ;;
 
 nginx-rollback)
   [ "${CONFIRM:-}" = "ROLLBACK-NGINX-PACKSHIP" ] || { echo "set CONFIRM=ROLLBACK-NGINX-PACKSHIP"; exit 1; }

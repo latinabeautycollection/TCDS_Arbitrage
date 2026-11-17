@@ -33,7 +33,7 @@ describe("PackShipTaskResponseMapper (V0.2.1, no database access)", () => {
     expect(t.taskId).toBe(BASE.packingTaskId); expect(t.rowVersion).toBe(7);
     expect(t.orderNumber).toBe("EXT-123"); expect(t.facilityCode).toBe("LV2TEST"); expect(t.stationCode).toBe("PACK-01");
     expect(t.carrierCutoffAt).toBe("2026-12-01T16:00:00Z"); expect(t.items[0].title).toBe("Test Phone 128GB");
-    expect(t.readiness.postgres).toBe("UNKNOWN"); expect(gate(t, "CONTENTS")).toBe("FAIL");
+    expect(t.readiness.postgres).toBe("UNKNOWN"); expect(gate(t, "CONTENTS")).toBe("PENDING");
   });
   it("shows an explicit placeholder, not an invented title, when the item has no product profile", () => {
     const t: any = mapSnapshot(snap({ items: [{ ...BASE.items[0], title: null }] }));
@@ -69,7 +69,7 @@ describe("PackShipTaskResponseMapper (V0.2.1, no database access)", () => {
     expect(gate(mapSnapshot(snap({ evidence: { ...ok, integrityVerified: false }, blockers: [] })), "EVIDENCE")).toBe("PENDING");
     expect(gate(mapSnapshot(snap({ evidence: { ...ok, rejected: 1 }, blockers: [] })), "EVIDENCE")).toBe("FAIL");
     expect(gate(mapSnapshot(snap({ blockers: [] })), "EVIDENCE")).toBe("PENDING"); // no requirements, before the step
-    expect(gate(mapSnapshot(snap({ evidence: { ...ok, integrityVerified: false }, blockers: ["EVIDENCE_PENDING"] })), "EVIDENCE")).toBe("FAIL");
+    expect(gate(mapSnapshot(snap({ evidence: { ...ok, integrityVerified: false }, blockers: ["EVIDENCE_PENDING"] })), "EVIDENCE")).toBe("PENDING");
   });
   it("EVIDENCE with no requirements passes once the task reached the evidence step (as the database allows)", () => {
     expect(gate(mapSnapshot(snap({ status: "EVIDENCE_PENDING", blockers: [] })), "EVIDENCE")).toBe("PASS");
@@ -87,6 +87,25 @@ describe("PackShipTaskResponseMapper (V0.2.1, no database access)", () => {
     expect(gate(mapSnapshot({ ...LABEL_VERIFIED, blockers: ["ITEM_ON_HOLD"] }), "OUTBOUND")).toBe("FAIL");
     expect(gate(mapSnapshot({ ...LABEL_VERIFIED, status: "PACKED" }), "OUTBOUND")).toBe("PENDING");
     expect(gate(mapSnapshot({ ...LABEL_VERIFIED, status: "OUTBOUND_STAGED", claim: null }), "OUTBOUND")).toBe("PASS");
+  });
+  it("a fresh task (the production response's blockers) shows no FAIL gate: not done yet is PENDING", () => {
+    const fresh = snap({ status: "READY", claim: null, blockers: ["SOURCE_UNVERIFIED", "ITEMS_UNVERIFIED", "PACKAGE_MISSING"] });
+    const t: any = mapSnapshot(fresh);
+    expect(t.completionGates.map((g: any) => g.state)).toEqual(["PENDING", "PENDING", "PENDING", "PENDING", "PENDING"]);
+    const measuring: any = mapSnapshot(snap({ status: "MEASURING", blockers: ["WEIGHT_MISSING", "DIMENSIONS_MISSING", "EVIDENCE_PENDING"] }));
+    expect(measuring.completionGates.some((g: any) => g.state === "FAIL")).toBe(false);
+  });
+  it("real problems are FAIL: item on hold / not packable fail CONTENTS and OUTBOUND", () => {
+    for (const b of ["ITEM_ON_HOLD", "ITEM_NOT_PACKABLE"]) {
+      const t: any = mapSnapshot({ ...LABEL_VERIFIED, blockers: [b] });
+      expect(gate(t, "CONTENTS")).toBe("FAIL"); expect(gate(t, "OUTBOUND")).toBe("FAIL");
+    }
+  });
+  it("an unknown blocker code is treated as a problem (OUTBOUND FAIL), never as harmless", () => {
+    expect(gate(mapSnapshot({ ...LABEL_VERIFIED, blockers: ["SOMETHING_NEW"] }), "OUTBOUND")).toBe("FAIL");
+  });
+  it("an open exception is a problem: OUTBOUND FAIL even before label", () => {
+    expect(gate(mapSnapshot(snap({ blockers: ["ITEMS_UNVERIFIED", "EXCEPTION_OPEN"] })), "OUTBOUND")).toBe("FAIL");
   });
   it("an open exception turns every PASS into FAIL", () => {
     const t: any = mapSnapshot({ ...LABEL_VERIFIED, blockers: ["EXCEPTION_OPEN"] });
