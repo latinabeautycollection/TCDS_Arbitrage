@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.flattenErrorShape = exports.PACKSHIP_PATHS = exports.SESSION_COOKIE = void 0;
+exports.flattenErrorShape = exports.WAREHOUSE_CONTROL_PATH = exports.PACKSHIP_PATHS = exports.SESSION_COOKIE = void 0;
 exports.createLoginV2IdentityReader = createLoginV2IdentityReader;
 exports.mountPackShipOnLoginV2 = mountPackShipOnLoginV2;
 const node_crypto_1 = __importDefault(require("node:crypto"));
@@ -13,8 +13,10 @@ const PackShipTaskResponseMapper_1 = require("../domains/packShip/mappers/PackSh
 const PackShipRouteService_1 = require("../domains/packShip/services/PackShipRouteService");
 const packShipRoutes_1 = require("../domains/packShip/routes/packShipRoutes");
 const packShipErrorMiddleware_1 = require("../domains/packShip/routes/packShipErrorMiddleware");
+const scannerCaptureSnapshotRoutes_1 = require("../domains/warehouseControl/routes/scannerCaptureSnapshotRoutes");
 exports.SESSION_COOKIE = "__Host-tcds_session";
 exports.PACKSHIP_PATHS = ["/api/v1/packing", "/api/v1/shipments"];
+exports.WAREHOUSE_CONTROL_PATH = "/api/v1/warehouse-control";
 const MUTATION = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const CSRF_PASSED = Symbol("packShipCsrfPassed");
 /**
@@ -55,6 +57,8 @@ function createLoginV2IdentityReader(d) {
             restrictedSession: x.restricted_session === true,
             authSessionId: x.auth_session_id,
             permissions: Array.isArray(x.permissions) ? x.permissions : [],
+            deviceId: typeof x.device_id === "string" ? x.device_id : null,
+            facilityId: typeof x.facility_id === "string" ? x.facility_id : null,
         };
     };
 }
@@ -84,8 +88,12 @@ function mountPackShipOnLoginV2(app, d) {
             req[CSRF_PASSED] = true;
         next();
     });
-    app.use(exports.PACKSHIP_PATHS, exports.flattenErrorShape, s.requestIds, s.securityHeaders, s.noStore, s.exactOrigin(d.publicOrigin), s.fetchMetadataGuard, csrfMarked);
+    app.use([...exports.PACKSHIP_PATHS, exports.WAREHOUSE_CONTROL_PATH], exports.flattenErrorShape, s.requestIds, s.securityHeaders, s.noStore, s.exactOrigin(d.publicOrigin), s.fetchMetadataGuard, csrfMarked);
+    const reader = createLoginV2IdentityReader(d);
     const service = new PackShipRouteService_1.PackShipRouteService(new PackShipV02Repository_1.PackShipV02Repository(d.packShipPool), new PackShipTaskResponseMapper_1.PackShipTaskResponseMapper());
-    app.use((0, packShipRoutes_1.buildPackShipRoutes)({ principalResolver: new PackShipPrincipalResolver_1.PackShipPrincipalResolver(createLoginV2IdentityReader(d)), service }));
+    app.use((0, packShipRoutes_1.buildPackShipRoutes)({ principalResolver: new PackShipPrincipalResolver_1.PackShipPrincipalResolver(reader), service }));
+    // Capture snapshot: any valid, unrestricted session (it serves every scanner workflow, not only Pack/Ship).
+    // The Pack/Ship pool's login holds tcds_scanner_snapshot_api (930), which may only execute the snapshot function.
+    app.use((0, scannerCaptureSnapshotRoutes_1.buildCaptureSnapshotRoutes)({ readIdentity: reader, pool: d.packShipPool }));
     app.use(exports.PACKSHIP_PATHS, packShipErrorMiddleware_1.packShipErrorMiddleware);
 }

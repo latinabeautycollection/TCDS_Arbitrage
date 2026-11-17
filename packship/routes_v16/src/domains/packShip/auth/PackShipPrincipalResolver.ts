@@ -12,6 +12,9 @@ export type TrustedWarehouseIdentityReader = (
   restrictedSession: boolean;
   authSessionId: string;
   permissions: readonly string[];
+  /** From the server-side session envelope (device and facility chosen at sign-in). Never from the request. */
+  deviceId?: string | null;
+  facilityId?: string | null;
 }>;
 
 export class PackShipPrincipalResolver {
