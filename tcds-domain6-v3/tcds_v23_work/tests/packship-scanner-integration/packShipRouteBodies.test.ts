@@ -23,6 +23,34 @@ afterEach(() => {
 const PACKAGE_ID = "9b2f4c1e-5d6a-4b7c-8e9f-0a1b2c3d4e5f";
 const OVERRIDE_ID = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
 
+function withCookie(value: string, run: () => Promise<void>) {
+  Object.defineProperty(document, "cookie", { configurable: true, get: () => value });
+  return run().finally(() => {
+    delete (document as unknown as Record<string, unknown>).cookie;
+  });
+}
+
+describe("Pack/Ship requests carry the Login V2 CSRF token", () => {
+  it("sends the cookie's token, decoded, on every call", async () => {
+    await withCookie("theme=dark; __Host-tcds_csrf=a%2Fb%3Dc; other=1", async () => {
+      await packShipApi.getTask("T1");
+      await packShipApi.scanItem("T1", "ITEM-1", 5);
+      await packShipApi.seal("T1", 4, PACKAGE_ID, 2);
+    });
+
+    expect(sent).toHaveLength(3);
+    for (const request of sent) expect(request.headers["X-CSRF-Token"]).toBe("a/b=c");
+  });
+
+  it("sends no CSRF header when there is no token cookie", async () => {
+    await withCookie("theme=dark", async () => {
+      await packShipApi.scanItem("T1", "ITEM-1", 5);
+    });
+
+    expect(sent[0].headers).not.toHaveProperty("X-CSRF-Token");
+  });
+});
+
 describe("Pack/Ship request bodies match the route contract", () => {
   it("seal sends the task and package versions and nothing else", async () => {
     await packShipApi.seal("T1", 4, PACKAGE_ID, 2);

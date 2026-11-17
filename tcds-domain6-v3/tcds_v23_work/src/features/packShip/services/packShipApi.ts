@@ -6,6 +6,12 @@ const API_BASE = (import.meta.env.VITE_API_BASE_URL || '').replace(/\/$/, '');
 const APP_VERSION = import.meta.env.VITE_APP_VERSION || '3.10.1';
 
 function uuid(): string { return crypto.randomUUID(); }
+// Login V2 refuses a write without the session's CSRF token, which it keeps in a readable
+// cookie; the request echoes it the same way the recovery client does.
+function csrfHeader(): Record<string, string> {
+  const value = document.cookie.split('; ').find((v) => v.startsWith('__Host-tcds_csrf='))?.split('=').slice(1).join('=');
+  return value ? { 'X-CSRF-Token': decodeURIComponent(value) } : {};
+}
 function installationId(): string {
   const key = 'tcds.installation_id';
   const current = localStorage.getItem(key);
@@ -60,7 +66,7 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
       credentials: 'include', cache: 'no-store', signal: controller.signal,
       headers: {
         'Content-Type': 'application/json', 'X-Request-ID': uuid(), 'X-Correlation-ID': correlationId ?? uuid(),
-        'X-TCDS-App-Version': APP_VERSION, 'X-TCDS-Installation-ID': installationId(),
+        'X-TCDS-App-Version': APP_VERSION, 'X-TCDS-Installation-ID': installationId(), ...csrfHeader(),
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}), ...(init.headers || {}),
       },
     });
