@@ -8,6 +8,7 @@ import type {
 import type { PutAwaySession } from "../../../../features/storage/types/storageTypes";
 import type { PickTask, ScanResult } from "../../../../features/picking/types/pickingTypes";
 import type { PackShipTask } from "../../../../features/packShip/types/packShipTypes";
+import type { PackShipCaptureEvidence } from "../../../../features/packShip/services/packShipApi";
 import type { PackShipLabelPairEvidence } from "../../../../features/packShip/scanning/packShipLabelEvidence";
 import type { ScanResolution } from "../../../../features/inventory/types/inventoryTypes";
 import type {
@@ -34,8 +35,8 @@ export interface PickingWorkflowPort {
 }
 
 export interface PackShipWorkflowPort {
-  scanSource(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext): Promise<PackShipTask>;
-  scanItem(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext): Promise<PackShipTask>;
+  scanSource(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext, capture?: PackShipCaptureEvidence): Promise<PackShipTask>;
+  scanItem(taskId: string, barcode: string, rowVersion: number, op: OperationRequestContext, capture?: PackShipCaptureEvidence): Promise<PackShipTask>;
   verifyLabel(
     shipmentId: string,
     trackingBarcode: string,
@@ -43,7 +44,7 @@ export interface PackShipWorkflowPort {
     op: OperationRequestContext,
     evidence: PackShipLabelPairEvidence,
   ): Promise<PackShipTask>;
-  stageOutbound(shipmentId: string, locationBarcode: string, op: OperationRequestContext): Promise<PackShipTask>;
+  stageOutbound(shipmentId: string, locationBarcode: string, op: OperationRequestContext, capture?: PackShipCaptureEvidence): Promise<PackShipTask>;
 }
 
 export interface InventoryWorkflowPort {

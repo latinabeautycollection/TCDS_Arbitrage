@@ -13,6 +13,16 @@ function installationId(): string {
   const created = uuid(); localStorage.setItem(key, created); return created;
 }
 
+/** Capture observation metadata is evidence only; backend still authorizes every operation. */
+export type PackShipCaptureEvidence = {
+  source: 'CAMERA' | 'MANUAL' | 'HID';
+  observationId?: string;
+  capturedAt?: string;
+  provider?: string;
+  symbology?: string;
+  canonicalSymbology?: string;
+};
+
 export type OperationContext = {
   clientOperationId: string;
   correlationId: string;
@@ -63,11 +73,11 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
 export const packShipApi = {
   getTask: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}`),
   claim: (taskId: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
-  scanSource: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-source`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
-  scanItem: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-item`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  scanSource: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-source`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  scanItem: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-item`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   selectPackage: (taskId: string, profileId: string, reason: string | undefined, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/package`, { method: 'POST', body: JSON.stringify({ profileId, reason, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   saveMeasurements: (taskId: string, payload: unknown, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/measurements`, { method: 'POST', body: JSON.stringify({ ...(payload as object), rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
-  seal: (taskId: string, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/seal`, { method: 'POST', body: JSON.stringify({ rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  seal: (taskId: string, rowVersion: number, packageId: string, packageRowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/seal`, { method: 'POST', body: JSON.stringify({ rowVersion, packageId, packageRowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   validateAddress: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/address/validate`, { method: 'POST', body: '{}' }, uuid()),
   getRates: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/rates`, { method: 'POST', body: '{}' }, uuid()),
   evaluateRisk: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/risk/evaluate`, { method: 'POST', body: '{}' }, uuid()),
@@ -93,6 +103,6 @@ export const packShipApi = {
     operation?.clientOperationId ?? uuid(),
     operation?.correlationId,
   ),
-  stageOutbound: (shipmentId: string, locationBarcode: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/outbound-stage`, { method: 'POST', body: JSON.stringify({ locationBarcode }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  stageOutbound: (shipmentId: string, locationBarcode: string, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/outbound-stage`, { method: 'POST', body: JSON.stringify({ locationBarcode, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   completionCheck: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/completion-check`, { method: 'POST', body: '{}' }, uuid()),
 };

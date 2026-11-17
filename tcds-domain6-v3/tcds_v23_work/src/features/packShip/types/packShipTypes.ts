@@ -128,6 +128,8 @@ export type PackShipTask = {
   sourceBarcode: string;
   sourceVerified: boolean;
   items: PackItem[];
+  packageId?: string;
+  packageRowVersion?: number;
   packageBarcode?: string;
   packaging?: PackagingRecommendation;
   itemLabelStatus: 'ACTIVE_PENDING_PRINT' | 'PRINT_QUEUED' | 'PRINTED' | 'APPLIED' | 'VERIFIED';

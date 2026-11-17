@@ -42,6 +42,17 @@ export class ProductionWorkflowAdapter {
       clientOperationId: envelope.clientOperationId,
       correlationId: envelope.correlationId,
     };
+    // Only a real Scandit observation creates CAMERA evidence. No duplicate
+    // scan writer, no generated observation identity, no guessed symbology.
+    const cameraCapture = envelope.captureSource === 'SCANDIT_WEB'
+      ? {
+          source: 'CAMERA' as const,
+          observationId: envelope.observation.observationId,
+          capturedAt: envelope.observation.capturedAt,
+          provider: envelope.observation.provider,
+          canonicalSymbology: envelope.observation.symbology,
+        }
+      : undefined;
     const raw = envelope.observation.rawValue;
     const intent = envelope.captureIntent.intent;
 
@@ -75,13 +86,13 @@ export class ProductionWorkflowAdapter {
         if (envelope.workflowStep === "PACK_SOURCE") {
           if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
           if (intent !== "SOURCE_ID") return blocked("INVALID_CAPTURE_INTENT");
-          return accepted(await this.ports.packShip.scanSource(envelope.workflowEntityId, raw, context.rowVersion, op));
+          return accepted(await this.ports.packShip.scanSource(envelope.workflowEntityId, raw, context.rowVersion, op, cameraCapture));
         }
 
         if (envelope.workflowStep === "PACK_ITEM") {
           if (context.rowVersion === undefined) return blocked("ROW_VERSION_REQUIRED");
           if (intent !== "ITEM_ID") return blocked("INVALID_CAPTURE_INTENT");
-          return accepted(await this.ports.packShip.scanItem(envelope.workflowEntityId, raw, context.rowVersion, op));
+          return accepted(await this.ports.packShip.scanItem(envelope.workflowEntityId, raw, context.rowVersion, op, cameraCapture));
         }
 
         // First physical half of label verification. This records no business mutation.
@@ -141,7 +152,7 @@ export class ProductionWorkflowAdapter {
       case "OUTBOUND":
         if (!context.shipmentId) return blocked("SHIPMENT_REQUIRED");
         if (intent !== "OUTBOUND_LOCATION") return blocked("INVALID_CAPTURE_INTENT");
-        return accepted(await this.ports.packShip.stageOutbound(context.shipmentId, raw, op));
+        return accepted(await this.ports.packShip.stageOutbound(context.shipmentId, raw, op, cameraCapture));
 
       case "INVENTORY":
         return resolved(await this.ports.inventory.resolveScan(raw, op));

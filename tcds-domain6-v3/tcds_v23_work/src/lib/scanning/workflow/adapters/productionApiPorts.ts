@@ -41,10 +41,10 @@ export const productionWorkflowPorts: WorkflowPortSet = {
     scanDestination: (task, barcode) => pickingApi.scanDestination(task, barcode),
   },
   packShip: {
-    scanSource: async (taskId, barcode, rowVersion, op) =>
-      packShipApi.scanSource(taskId, barcode, rowVersion, operationContext(op)),
-    scanItem: async (taskId, barcode, rowVersion, op) =>
-      packShipApi.scanItem(taskId, barcode, rowVersion, operationContext(op)),
+    scanSource: async (taskId, barcode, rowVersion, op, capture) =>
+      packShipApi.scanSource(taskId, barcode, rowVersion, operationContext(op), capture),
+    scanItem: async (taskId, barcode, rowVersion, op, capture) =>
+      packShipApi.scanItem(taskId, barcode, rowVersion, operationContext(op), capture),
     verifyLabel: async (shipmentId, trackingBarcode, packageBarcode, op, evidence) =>
       packShipApi.verifyLabel(
         shipmentId,
@@ -53,8 +53,8 @@ export const productionWorkflowPorts: WorkflowPortSet = {
         operationContext(op),
         evidence,
       ),
-    stageOutbound: async (shipmentId, locationBarcode, op) =>
-      packShipApi.stageOutbound(shipmentId, locationBarcode, operationContext(op)),
+    stageOutbound: async (shipmentId, locationBarcode, op, capture) =>
+      packShipApi.stageOutbound(shipmentId, locationBarcode, operationContext(op), capture),
   },
   inventory: {
     resolveScan: (value) => resolveInventoryScan(value),
