@@ -71,11 +71,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+const PACKAGE_ID = "9b2f4c1e-5d6a-4b7c-8e9f-0a1b2c3d4e5f";
+const OVERRIDE_ID = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
+
 const actionCalls: Array<[string, (op?: OperationContext) => Promise<unknown>]> = [
   ["claim", (op) => packShipApi.claim("T1", op)],
   ["selectPackage", (op) => packShipApi.selectPackage("T1", "BOX-S", undefined, 4, op)],
-  ["saveMeasurements", (op) => packShipApi.saveMeasurements("T1", { weightOz: 12 }, 4, op)],
-  ["seal", (op) => packShipApi.seal("T1", 4, op)],
+  ["saveMeasurements", (op) => packShipApi.saveMeasurements("T1", 4, PACKAGE_ID, 2, { weightOz: 12, lengthIn: 10, widthIn: 8, heightIn: 4 }, { type: "MANUAL", overrideDecisionId: OVERRIDE_ID }, op)],
+  ["seal", (op) => packShipApi.seal("T1", 4, PACKAGE_ID, 2, op)],
   ["purchaseLabel", (op) => packShipApi.purchaseLabel("S1", op)],
   ["printLabel", (op) => packShipApi.printLabel("S1", op)],
 ];

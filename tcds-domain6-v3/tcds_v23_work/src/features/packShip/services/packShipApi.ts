@@ -23,6 +23,19 @@ export type PackShipCaptureEvidence = {
   canonicalSymbology?: string;
 };
 
+/** Package measurements in the units the Pack/Ship routes take: ounces and inches. */
+export type PackShipMeasurementInput = {
+  weightOz: number;
+  lengthIn: number;
+  widthIn: number;
+  heightIn: number;
+};
+
+/** Where the weight came from: a stable scale reading, or manual entry a supervisor approved. */
+export type PackShipWeightSource =
+  | { type: 'SCALE'; weighSessionId: string }
+  | { type: 'MANUAL'; overrideDecisionId: string };
+
 export type OperationContext = {
   clientOperationId: string;
   correlationId: string;
@@ -76,7 +89,7 @@ export const packShipApi = {
   scanSource: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-source`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   scanItem: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-item`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   selectPackage: (taskId: string, profileId: string, reason: string | undefined, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/package`, { method: 'POST', body: JSON.stringify({ profileId, reason, rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
-  saveMeasurements: (taskId: string, payload: unknown, rowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/measurements`, { method: 'POST', body: JSON.stringify({ ...(payload as object), rowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
+  saveMeasurements: (taskId: string, rowVersion: number, packageId: string, packageRowVersion: number, measurement: PackShipMeasurementInput, weightSource: PackShipWeightSource, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/measurements`, { method: 'POST', body: JSON.stringify({ rowVersion, packageId, packageRowVersion, weightOz: measurement.weightOz, lengthIn: measurement.lengthIn, widthIn: measurement.widthIn, heightIn: measurement.heightIn, weightSource }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   seal: (taskId: string, rowVersion: number, packageId: string, packageRowVersion: number, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/seal`, { method: 'POST', body: JSON.stringify({ rowVersion, packageId, packageRowVersion }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   validateAddress: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/address/validate`, { method: 'POST', body: '{}' }, uuid()),
   getRates: (shipmentId: string) => request<PackShipTask>(`/api/v1/shipments/${shipmentId}/rates`, { method: 'POST', body: '{}' }, uuid()),
