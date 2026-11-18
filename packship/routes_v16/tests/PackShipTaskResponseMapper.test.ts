@@ -121,3 +121,24 @@ describe("PackShipTaskResponseMapper (V0.2.1, no database access)", () => {
     expect((mapSnapshot(LABEL_VERIFIED) as any).carrierLabel.status).toBe("SCAN_VERIFIED");
   });
 });
+
+describe("V0.2.3 control fields (claim, taskStatus, manualWeightApproval)", () => {
+  const D = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
+  it("passes the database status and the claim as the database reports it", () => {
+    const t: any = mapSnapshot(snap({ status: "READY", claim: null }));
+    expect(t.taskStatus).toBe("READY"); expect(t.claim).toBeNull();
+    const held: any = mapSnapshot(snap());
+    expect(held.claim).toEqual({ heldBySession: true, expired: false, expiresAt: "2026-11-17T10:00:00Z" });
+    const other: any = mapSnapshot(snap({ claim: { ...BASE.claim, heldBySession: false } }));
+    expect(other.claim.heldBySession).toBe(false);
+    const missing: any = mapSnapshot(snap({ claim: { expiresAt: "x" } }));   // absent flags are never read as true
+    expect(missing.claim).toEqual({ heldBySession: false, expired: false, expiresAt: "x" });
+  });
+  it("manualWeightApproval: a well-formed approval is passed on; absent (pre-916) or malformed is null", () => {
+    expect((mapSnapshot(snap()) as any).manualWeightApproval).toBeNull();
+    expect((mapSnapshot(snap({ manualWeightApproval: null })) as any).manualWeightApproval).toBeNull();
+    expect((mapSnapshot(snap({ manualWeightApproval: { overrideDecisionId: "not-a-uuid" } })) as any).manualWeightApproval).toBeNull();
+    expect((mapSnapshot(snap({ manualWeightApproval: { overrideDecisionId: D, decidedAt: "2026-11-18T07:00:00Z", expiresAt: null, reasonCode: "NO_SCALE" } })) as any)
+      .manualWeightApproval).toEqual({ overrideDecisionId: D, decidedAt: "2026-11-18T07:00:00Z", expiresAt: null });
+  });
+});

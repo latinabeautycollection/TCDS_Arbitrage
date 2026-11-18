@@ -86,7 +86,16 @@ which the database does not condition on readiness; `stationReadiness` is in the
     `profileId` to send to `POST .../package`. Malformed or cross-task database output is refused (502).
     Deploy order: 914 apply, then the route update (probe P11). Rollback in reverse.
 
+18. **Control fields (V0.2.3, 2026-11-18)** for the PWA Claim / Select Box / Measurements / Seal controls. The task
+    response gains `taskStatus` (the database status), `claim` (`heldBySession`, `expired`, `expiresAt`, or null) and
+    `manualWeightApproval` (`overrideDecisionId`, `decidedAt`, `expiresAt`, or null). Database `916`
+    (packship/v023): `packship__snapshot` adds `manualWeightApproval`: exactly the decisions
+    `packship_record_measurements_v2` would accept from the caller (MANUAL_WEIGHT, APPROVED, not revoked or expired,
+    approved by someone else, task-level or for the current package). Additive; snapshotVersion stays 0.2.1; a
+    malformed approval maps to null. Deploy order: 916 apply, then the route update.
+
 ## Verification
+- V0.2.3 (2026-11-18): Jest 98/98; local replica 910+912+914+916 then 54 + 18 + 23 + 10; 916 rollback restores 912.
 - V0.2.2 (2026-11-18): Jest 96/96 (22 new, using the real 914 output from the local replica); `tsc --strict` clean.
   Database on the local replica: 910 + 912 + 914, then 911 54/54, 913 18/18, 915 23/23 in one transaction; rollback
   restores the exact V0.2 function and 911 passes again.

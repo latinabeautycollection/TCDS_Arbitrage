@@ -32,6 +32,7 @@ export type V02TaskSnapshot = {
     employeeId?: string;
     deviceId?: string;
     expiresAt?: string;
+    expired?: boolean;
   } | null;
   sourceVerified: boolean;
   items: Array<{
@@ -76,6 +77,8 @@ export type V02TaskSnapshot = {
     ready: boolean; evaluatedAt: string; ageSeconds: number;
     readinessScore: number | null; blockingFailures: number; reasons: string[];
   } | null;
+  /** V0.2.3 (916): the manual-weight approval this session may use; absent on pre-916 snapshots. */
+  manualWeightApproval?: { overrideDecisionId: string; decidedAt: string | null; expiresAt: string | null; reasonCode: string } | null;
   printJob?: {
     printJobId: string; jobType: string; status: string; attemptCount: number;
     completedAt: string | null; updatedAt: string;
