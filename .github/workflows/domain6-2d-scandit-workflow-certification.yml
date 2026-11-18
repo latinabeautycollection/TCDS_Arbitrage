@@ -90,5 +90,8 @@ jobs:
       - run: npm run packship:scanner:typecheck
       - run: npm run packship:scanner:test
 
+      # The Pack/Ship business controls (Claim, Select Box, Measurements, Seal).
+      - run: npm run packship:controls:test
+
       - run: npm run check --if-present
       - run: npm run verify --if-present
