@@ -75,6 +75,11 @@ export function mapSnapshot(snapshot: V02TaskSnapshot): Record<string, unknown> 
     ...(s.shipment?.shipmentId ? { shipmentId: s.shipment.shipmentId } : {}),
     facilityCode: s.facility!.facilityCode, stationCode: s.station?.stationCode ?? "UNASSIGNED",
     employeeName: "Assigned operator", claimExpiresAt: s.claim?.expiresAt ?? "",
+    // V0.2.3: what the Claim / Select Box / Measurements / Seal controls need. Additive; the database decides.
+    taskStatus: s.status,
+    claim: s.claim ? { heldBySession: s.claim.heldBySession === true, expired: s.claim.expired === true,
+      expiresAt: s.claim.expiresAt ?? null } : null,
+    manualWeightApproval: mapManualWeightApproval(s.manualWeightApproval),
     ...(s.carrierCutoffAt ? { carrierCutoffAt: s.carrierCutoffAt } : {}),
     rowVersion: s.rowVersion,
     stage: mapStage(s.status), sourceBarcode: "", sourceVerified: s.sourceVerified,
@@ -106,6 +111,14 @@ export function mapSnapshot(snapshot: V02TaskSnapshot): Record<string, unknown> 
     completionGates: gates, localPendingCount: 0, lastUpdatedAt: new Date().toISOString(),
     operationalMessages: [],
   };
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** Only a well-formed approval is passed on; anything else is treated as "no approval" (the database still checks). */
+function mapManualWeightApproval(a: V02TaskSnapshot["manualWeightApproval"]) {
+  if (!a || typeof a !== "object" || typeof a.overrideDecisionId !== "string" || !UUID_RE.test(a.overrideDecisionId)) return null;
+  return { overrideDecisionId: a.overrideDecisionId, decidedAt: typeof a.decidedAt === "string" ? a.decidedAt : null,
+    expiresAt: typeof a.expiresAt === "string" ? a.expiresAt : null };
 }
 
 function validateSnapshot(s: V02TaskSnapshot): void {
