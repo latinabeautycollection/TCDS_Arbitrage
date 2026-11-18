@@ -30,7 +30,7 @@ export function requireBody(req: Request): Body {
 export function validatePackShipRequest(req: Request, action: string): Body {
   if (req.params.taskId !== undefined) validUuid(req.params.taskId, "taskId");
   if (req.params.shipmentId !== undefined) validUuid(req.params.shipmentId, "shipmentId");
-  if (action === "getTask" || action === "completionCheck") return {};
+  if (action === "getTask" || action === "completionCheck" || action === "packagingOptions") return {};
   const b = requireBody(req);
   switch (action) {
     case "claim": break;

@@ -97,3 +97,29 @@ export type V02Result = {
   scanResult?: string;
   [key: string]: unknown;
 };
+
+/** V0.2.2 (914) warehouse.packship_list_packaging_options_v2 result. */
+export type V022PackagingOption = {
+  profileId: string; profileCode: string; profileName: string; version: number; packagingTypeCode: string;
+  itemCategoryKey: string | null; maximumWeightOz: number | null;
+  minimumLengthIn: number | null; minimumWidthIn: number | null; minimumHeightIn: number | null;
+};
+export type V022PackagingOptionsResult = {
+  ok: boolean; code: string; packingTaskId?: string; taskStatus?: string; taskRowVersion?: number; selectable?: boolean;
+  eligibilityRule?: string;
+  basis?: { itemCount: number; knownWeightOz: number; itemsWithoutWeight: number; categories: string[]; itemsWithoutCategory: number };
+  options?: V022PackagingOption[];
+  [key: string]: unknown;
+};
+
+/** GET /api/v1/packing/tasks/:taskId/packaging-options response (contract packship.packaging-options.v1). */
+export type PackagingOptionsResponse = {
+  contractVersion: "packship.packaging-options.v1";
+  taskId: string; taskStatus: string; taskRowVersion: number;
+  /** true when POST .../package would accept a choice now (status PACKING, claim held by this session, no package yet). */
+  selectable: boolean;
+  eligibilityRule: string;
+  basis: { itemCount: number; knownWeightOz: number; itemsWithoutWeight: number; categories: string[]; itemsWithoutCategory: number };
+  /** Send options[i].profileId as `profileId` to POST .../package. */
+  options: V022PackagingOption[];
+};

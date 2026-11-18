@@ -9,6 +9,9 @@ class PackShipV02Repository {
     async getTask(authSessionId, taskId) {
         return this.call(`select warehouse.packship_get_task_v2($1::uuid,$2::uuid) result`, [authSessionId, taskId]);
     }
+    async listPackagingOptions(authSessionId, taskId) {
+        return this.call(`select warehouse.packship_list_packaging_options_v2($1::uuid,$2::uuid) result`, [authSessionId, taskId]);
+    }
     async claim(authSessionId, taskId, op) {
         return this.call(`select warehouse.packship_claim_task_v2($1::uuid,$2::uuid,$3,$4::uuid,$5::uuid) result`, [authSessionId, taskId, op.idempotencyKey, op.requestId, op.correlationId]);
     }

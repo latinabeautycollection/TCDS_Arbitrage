@@ -73,7 +73,23 @@ which the database does not condition on readiness; `stationReadiness` is in the
     session envelope only. Any valid unrestricted session (not PACKSHIP_PACK: it serves every scanner workflow).
     Proven against PR #13's own decoder + validator (verbatim copies) with the real 930 output.
 
+17. **Eligible packaging (V0.2.2, 2026-11-18).** Dev team (2026-11-17): serve the eligible
+    `warehouse.packaging_profiles` records to the PWA through an approved backend interface, with eligibility enforced
+    on the server. Database `914` (packship/v022): `packship_list_packaging_options_v2(session, task)` (API role only)
+    and `packship_select_package_v2` now refuses an active box that is not eligible (`PACKSHIP_PACKAGING_NOT_ELIGIBLE`,
+    409); both use one rule, `PACKSHIP_PACKAGING_ELIGIBILITY_V1`: active and in date, highest in-date version per
+    profile code, known item weight (item actual weight, else product expected weight, x quantity) within the box's
+    maximum weight, and a category-limited box only when every item has that category (unknown category = not
+    offered). Box minimum dimensions are not used (meaning undefined). The package records the rule and its basis.
+    Route `GET /api/v1/packing/tasks/:taskId/packaging-options` (no CSRF: read), contract
+    `packship.packaging-options.v1`: `taskStatus`, `taskRowVersion`, `selectable`, `basis`, `options[]` with the real
+    `profileId` to send to `POST .../package`. Malformed or cross-task database output is refused (502).
+    Deploy order: 914 apply, then the route update (probe P11). Rollback in reverse.
+
 ## Verification
+- V0.2.2 (2026-11-18): Jest 96/96 (22 new, using the real 914 output from the local replica); `tsc --strict` clean.
+  Database on the local replica: 910 + 912 + 914, then 911 54/54, 913 18/18, 915 23/23 in one transaction; rollback
+  restores the exact V0.2 function and 911 passes again.
 - `tsc 5.8.3 --strict` against real `express@5.1.0` / `@types/express@5.0.3` / `pg@8.16.3` types: clean.
 - Jest: 60/60. Mount 24 (new: real Express 5 app + byte copy of the deployed 6.1B `security.ts`, fake pools),
   mapper 18 (new, including "a fully verified LABEL_VERIFIED task passes every blocking gate"), capture evidence 7 (the V1.2 fixture updated to V1.5's camera rule, plus 3 new

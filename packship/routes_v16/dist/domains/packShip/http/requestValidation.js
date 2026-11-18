@@ -41,7 +41,7 @@ function validatePackShipRequest(req, action) {
         validUuid(req.params.taskId, "taskId");
     if (req.params.shipmentId !== undefined)
         validUuid(req.params.shipmentId, "shipmentId");
-    if (action === "getTask" || action === "completionCheck")
+    if (action === "getTask" || action === "completionCheck" || action === "packagingOptions")
         return {};
     const b = requireBody(req);
     switch (action) {
