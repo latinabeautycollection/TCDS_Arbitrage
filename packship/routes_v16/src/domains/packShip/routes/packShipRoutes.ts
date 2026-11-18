@@ -20,6 +20,16 @@ export function buildPackShipRoutes(input:{
     }catch(e){next(e)}
   });
 
+  // V0.2.2: the boxes this task may use (eligibility enforced again by POST .../package). Read-only, no CSRF.
+  r.get("/api/v1/packing/tasks/:taskId/packaging-options", async(req,res,next)=>{
+    try{
+      const p=await input.principalResolver.resolve(req,res,false);
+      validatePackShipRequest(req,"packagingOptions");
+      res.setHeader("Cache-Control","no-store");
+      res.json(await input.service.listPackagingOptions(p.authSessionId,req.params.taskId));
+    }catch(e){next(e)}
+  });
+
   r.post("/api/v1/packing/tasks/:taskId/completion-check", async(req,res,next)=>{
     try{
       const p=await input.principalResolver.resolve(req,res,true);

@@ -3,6 +3,7 @@ import type {
   CaptureEvidence,
   OperationHeaders,
   V02Result,
+  V022PackagingOptionsResult,
 } from "../contracts/packShipRouteTypes";
 
 export class PackShipV02Repository {
@@ -13,6 +14,13 @@ export class PackShipV02Repository {
       `select warehouse.packship_get_task_v2($1::uuid,$2::uuid) result`,
       [authSessionId, taskId],
     );
+  }
+
+  async listPackagingOptions(authSessionId: string, taskId: string): Promise<V022PackagingOptionsResult> {
+    return this.call(
+      `select warehouse.packship_list_packaging_options_v2($1::uuid,$2::uuid) result`,
+      [authSessionId, taskId],
+    ) as Promise<V022PackagingOptionsResult>;
   }
 
   async claim(authSessionId: string, taskId: string, op: OperationHeaders): Promise<V02Result> {

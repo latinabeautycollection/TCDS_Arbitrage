@@ -1,0 +1,56 @@
+{
+    "ok": true,
+    "code": "OK",
+    "basis": {
+        "itemCount": 1,
+        "categories": [
+            "phones"
+        ],
+        "knownWeightOz": 10.0,
+        "itemsWithoutWeight": 0,
+        "itemsWithoutCategory": 0
+    },
+    "options": [
+        {
+            "version": 1,
+            "profileId": "e905d025-2b9b-42fb-bdca-1652e39e1d85",
+            "profileCode": "PSV022-HEAVY",
+            "profileName": "PSV022 heavy box",
+            "minimumWidthIn": null,
+            "itemCategoryKey": null,
+            "maximumWeightOz": 64,
+            "minimumHeightIn": null,
+            "minimumLengthIn": null,
+            "packagingTypeCode": "BOX"
+        },
+        {
+            "version": 1,
+            "profileId": "5661e517-18dd-4c4b-9376-27f73b788a5a",
+            "profileCode": "PSV022-PHONE",
+            "profileName": "PSV022 phone box",
+            "minimumWidthIn": null,
+            "itemCategoryKey": "Phones",
+            "maximumWeightOz": null,
+            "minimumHeightIn": null,
+            "minimumLengthIn": null,
+            "packagingTypeCode": "BOX"
+        },
+        {
+            "version": 2,
+            "profileId": "cd06abed-ea03-4bda-a4ff-1dc72f81d20a",
+            "profileCode": "PSV022-VER",
+            "profileName": "PSV022 versioned v2",
+            "minimumWidthIn": null,
+            "itemCategoryKey": null,
+            "maximumWeightOz": null,
+            "minimumHeightIn": null,
+            "minimumLengthIn": null,
+            "packagingTypeCode": "BOX"
+        }
+    ],
+    "selectable": false,
+    "taskStatus": "MEASURING",
+    "packingTaskId": "2108115b-d84f-4865-9482-d95e4b265b45",
+    "taskRowVersion": 9,
+    "eligibilityRule": "PACKSHIP_PACKAGING_ELIGIBILITY_V1"
+}

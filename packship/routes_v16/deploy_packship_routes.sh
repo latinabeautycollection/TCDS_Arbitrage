@@ -21,7 +21,7 @@ CAND=$LV/candidate
 VHOST=/etc/nginx/sites-enabled/warehouse-app.tcdsolutionsgroup.com
 PUBLIC=https://warehouse-app.tcdsolutionsgroup.com
 ORIG_HOST_SHA16=1264a0a0a203919c          # the deployed host before this change (inspect_loginv2.sh, 2026-11-17)
-SUMS_SHA=fda2acec3cafa1273fb51f4e52fa2162a3a1e5e79ef6a99874cf2355ccb79e16
+SUMS_SHA=5f0c37363d8a46587383c54571225d760b38dd085ca4cb1b84c63d03dceecd44
 UUID=00000000-0000-4000-8000-000000000000
 umask 077
 
@@ -53,6 +53,7 @@ probes() {   # $1 = base URL
   probe "P8 outbound-stage without session -> 401" 401 '{"code":"PACKSHIP_SESSION_INVALID"}' -X POST -H "Origin: $ORIGIN" -H 'Content-Type: application/json' -d '{}' "$u/api/v1/shipments/$UUID/outbound-stage"
   probe "P9 unknown Pack/Ship path -> 404 {code}" 404 '{"code":"NOT_FOUND"}' "$u/api/v1/packing/nope"
   probe "P10 capture snapshot without session -> 401" 401 '{"code":"AUTH_REQUIRED"}' "$u/api/v1/warehouse-control/scanner/capture-snapshot"
+  probe "P11 packaging options without session -> 401 {code} (needs 914 applied first)" 401 '{"code":"PACKSHIP_SESSION_INVALID"}' "$u/api/v1/packing/tasks/$UUID/packaging-options"
 }
 host_known() {   # live host is the original, or this package's own host (an update of the routes only)
   local h; h=$(sha256sum "$HOST" | cut -c1-16)
