@@ -17,6 +17,7 @@ import { InlineFieldGuidance } from './components/InlineFieldGuidance';
 import { GuidanceCard } from './components/GuidanceCard';
 import { MessageDetailSheet } from './components/MessageDetailSheet';
 import { PackShipToast } from './components/PackShipToast';
+import { ClaimTaskCard, MeasurementForm, PackagingSelector, SealPackageCard, type ControlSubmit } from './components/PackShipControls';
 import { bindPackShipManualOperation } from './scanning/packShipManualOperation';
 import { selectPackShipTaskSnapshot } from './scanning/packShipTaskSnapshot';
 import { isUncertainPackShipError, type PendingPackShipRetry } from './scanning/packShipRetry';
@@ -122,6 +123,12 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
     finally { setBusy(false); }
   };
 
+  // Pack/Ship business controls: one operation identity per tap, retried as the same operation when uncertain.
+  const submitControl: ControlSubmit = (submit, successTitle, successDetail) => {
+    const bound = bindPackShipManualOperation(submit);
+    void mutate(bound.run, successTitle, successDetail, true);
+  };
+
   const retryPending = () => {
     if (pendingRetry) {
       void mutate(pendingRetry.run, pendingRetry.successTitle, pendingRetry.successDetail, true);
@@ -163,6 +170,7 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
       </ScreenCard>
 
       <ProgressRail stage={task.stage}/><IdentityCards task={task}/>
+      <ClaimTaskCard task={task} disabled={interactionLocked || !online} onSubmit={submitControl}/>
 
       {PACK_SHIP_CAMERA_ENABLED && capturePolicyAuthority ? (
         <Suspense fallback={<ScreenCard><p className="text-sm font-black">Loading governed camera scanner…</p></ScreenCard>}>
@@ -196,6 +204,7 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
         <h3 className="font-display text-lg font-black">Packaging Recommendation</h3>
         <GuidanceCard what="Use the approved package and protection profile." why="The profile balances damage prevention, dimensional weight, battery rules, and shipping cost." next="Create and measure the sealed TCDS package."/>
         {task.packaging ? <div className="mt-3 rounded-2xl border border-tcds-gold/30 bg-tcds-gold/10 p-4"><div className="flex items-center gap-2"><Box className="text-tcds-goldDeep"/><p className="font-black">{task.packaging.packageCode}</p><span className="ml-auto text-xs font-black">{Math.round(task.packaging.confidence * 100)}%</span></div><p className="mt-2 text-sm font-semibold">{task.packaging.description}</p><ul className="mt-2 space-y-1 text-sm text-tcds-muted">{task.packaging.protection.map((x) => <li key={x}>✓ {x}</li>)}</ul></div> : <p className="mt-2 text-sm text-tcds-muted">Recommendation will load after contents are verified.</p>}
+        <PackagingSelector task={task} disabled={interactionLocked || !online} onSubmit={submitControl}/>
       </ScreenCard></section>
 
       <section id="stage-measurements"><ScreenCard>
@@ -203,12 +212,14 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
         <GuidanceCard what="Place the completed package on the scale and confirm all three dimensions." why="Measured values control service availability, protection rules, and dimensional shipping cost." next="Capture packing evidence and seal the package."/>
         <div className="mt-3 grid grid-cols-2 gap-2"><Metric icon={<Scale size={18}/>} label="Weight" value={task.measurement.weightLb ? `${task.measurement.weightLb} lb` : 'Pending'}/><Metric icon={<PackageCheck size={18}/>} label="Dimensions" value={task.measurement.lengthIn ? `${task.measurement.lengthIn}×${task.measurement.widthIn}×${task.measurement.heightIn} in` : 'Pending'}/></div>
         <p className="mt-3 text-xs font-semibold text-tcds-muted">Source: {task.measurement.source} · Stable reading: {task.measurement.stable ? 'Yes' : 'No'}</p><InlineFieldGuidance message={inline('weight') || inline('length') || inline('width') || inline('height')}/>
+        <MeasurementForm task={task} disabled={interactionLocked || !online} onSubmit={submitControl}/>
       </ScreenCard></section>
 
       <section id="stage-evidence"><ScreenCard>
         <h3 className="font-display text-lg font-black">Packing Evidence</h3><GuidanceCard what="Capture every required artifact before sealing." why="Evidence protects TCDS in carrier, customer, return, and fraud disputes." next="The system validates hashes and image quality before shipping authorization."/>
         <div className="mt-3 grid grid-cols-4 gap-2 text-center"><Metric label="Required" value={String(task.evidence.required)}/><Metric label="Accepted" value={String(task.evidence.accepted)}/><Metric label="Pending" value={String(task.evidence.pending)}/><Metric label="Rejected" value={String(task.evidence.rejected)}/></div>
         <button onClick={() => navigate(`/photos?mode=PACKING_EVIDENCE&taskId=${encodeURIComponent(task.taskId)}`)} className="mt-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-2xl border border-tcds-line bg-white font-black"><Camera size={18}/> Capture Packing Evidence</button>
+        <SealPackageCard task={task} disabled={interactionLocked || !online} onSubmit={submitControl}/>
       </ScreenCard></section>
 
       <section id="stage-address"><ScreenCard>

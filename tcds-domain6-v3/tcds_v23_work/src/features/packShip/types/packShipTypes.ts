@@ -147,4 +147,26 @@ export type PackShipTask = {
   localPendingCount: number;
   lastUpdatedAt: string;
   operationalMessages?: PackShipMessage[];
+  /** Backend task status (V0.2.3 route). The Pack/Ship controls use it; the database still decides every write. */
+  taskStatus?: string;
+  /** The active claim as the database reports it for this session; null when nobody holds the task. */
+  claim?: PackShipClaim | null;
+  /** A supervisor approval this packer may use for a manual weight; null when there is none. */
+  manualWeightApproval?: ManualWeightApproval | null;
+};
+
+export type PackShipClaim = { heldBySession: boolean; expired: boolean; expiresAt: string | null };
+export type ManualWeightApproval = { overrideDecisionId: string; decidedAt: string | null; expiresAt: string | null };
+
+/** GET /api/v1/packing/tasks/:taskId/packaging-options (contract packship.packaging-options.v1). */
+export type PackagingOption = {
+  profileId: string; profileCode: string; profileName: string; version: number; packagingTypeCode: string;
+  itemCategoryKey: string | null; maximumWeightOz: number | null;
+  minimumLengthIn: number | null; minimumWidthIn: number | null; minimumHeightIn: number | null;
+};
+export type PackagingOptions = {
+  contractVersion: 'packship.packaging-options.v1';
+  taskId: string; taskStatus: string; taskRowVersion: number; selectable: boolean; eligibilityRule: string;
+  basis: { itemCount: number; knownWeightOz: number; itemsWithoutWeight: number; categories: string[]; itemsWithoutCategory: number };
+  options: PackagingOption[];
 };

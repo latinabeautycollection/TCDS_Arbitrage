@@ -1,4 +1,4 @@
-import type { PackShipTask } from '../types/packShipTypes';
+import type { PackagingOptions, PackShipTask } from '../types/packShipTypes';
 import type { PackShipMessage } from '../types/packShipMessages';
 import type { PackShipLabelPairEvidence } from '../scanning/packShipLabelEvidence';
 
@@ -91,6 +91,7 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
 // as the same operation; without one, each call gets new ids.
 export const packShipApi = {
   getTask: (taskId: string) => request<PackShipTask>(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}`),
+  getPackagingOptions: (taskId: string) => request<PackagingOptions>(`/api/v1/packing/tasks/${encodeURIComponent(taskId)}/packaging-options`),
   claim: (taskId: string, operation?: OperationContext) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/claim`, { method: 'POST', body: '{}' }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   scanSource: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-source`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
   scanItem: (taskId: string, barcode: string, rowVersion: number, operation?: OperationContext, capture?: PackShipCaptureEvidence) => request<PackShipTask>(`/api/v1/packing/tasks/${taskId}/scan-item`, { method: 'POST', body: JSON.stringify({ barcode, rowVersion, ...(capture ? { capture } : {}) }) }, operation?.clientOperationId ?? uuid(), operation?.correlationId),
