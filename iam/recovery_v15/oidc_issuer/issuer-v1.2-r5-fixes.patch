@@ -1,0 +1,94 @@
+--- a/src/policy.mjs
++++ b/src/policy.mjs
+@@ -40,6 +40,16 @@
+  if(!String(params?.acr_values||'').split(/\s+/).includes(REQUIRED_ACR))throw Error('REQUIRED_ACR_MISSING');
+  return true;
+ }
++// r5: the stored INTERACTION parameters, after oidc-provider has processed the request. /auth already required the raw
++// request to carry max_age=0 + prompt=login + the ACR (assertFreshOidcRequest, unchanged). oidc-provider then
++// normalises max_age=0 into prompt=login and removes max_age (checkMaxAge, as OIDC Core 3.1.2.1 allows), so requiring
++// max_age here refused every real sign-in. Still required: prompt=login and the ACR; max_age may only be absent or 0.
++export function assertFreshInteraction(params){
++ const m=params?.max_age;
++ if((m!==undefined&&m!==null&&String(m)!=='0')||!String(params?.prompt||'').split(/\s+/).includes('login'))throw Error('FRESH_PASSKEY_LOGIN_REQUIRED');
++ if(!String(params?.acr_values||'').split(/\s+/).includes(REQUIRED_ACR))throw Error('REQUIRED_ACR_MISSING');
++ return true;
++}
+ export function assertPasskeyProof(proof,{requestId,issuer,expectedChallengeId,interactionId,now=Date.now()}={}){
+  if(!proof||proof.verifier!=='TCDS_CENTRAL_IAM_WEBAUTHN'||proof.action!=='EOC_OIDC_LOGIN'||proof.issuer!==issuer||proof.requestId!==requestId||proof.challengeId!==expectedChallengeId||(interactionId!==undefined&&proof.interactionId!==interactionId))throw Error('IAM_PASSKEY_PROOF_BINDING_INVALID');
+  if(typeof proof.subject!=='string'||!/^[-A-Za-z0-9._~]{16,255}$/.test(proof.subject))throw Error('INVALID_SUBJECT');
+--- a/src/server.mjs
++++ b/src/server.mjs
+@@ -4,7 +4,7 @@
+ import {csrfToken, parseIssuerCookies, sameOriginRequest, validatedIssuerKeys} from './security-v11.mjs';
+ import pg from 'pg';
+ import Provider from 'oidc-provider';
+-import {requiredEnv,assertPkce,assertFreshOidcRequest,REQUIRED_ACR,constantEqual,hashHex,safeUid,servedWhileLoginDisabled} from './policy.mjs';
++import {requiredEnv,assertPkce,assertFreshOidcRequest,assertFreshInteraction,REQUIRED_ACR,constantEqual,hashHex,safeUid,servedWhileLoginDisabled} from './policy.mjs';
+ import {createAdapterFactory} from './pg-adapter.mjs';
+ import {createIamVerifier} from './iam-verifier-client.mjs';
+ const env=process.env;
+@@ -50,7 +50,7 @@
+  if(!safeUid(uid))return safeJson(res,400,{error:'INVALID_INTERACTION'});
+  const details=await provider.interactionDetails(req,res);
+  if(details.uid!==uid||details.prompt?.name!=='login')return safeJson(res,403,{error:'LOGIN_REQUIRED'});
+- assertPkce(details.params);assertFreshOidcRequest(details.params);
++ assertPkce(details.params);assertFreshInteraction(details.params);
+  if(details.params.client_id!==env.OIDC_CLIENT_ID)return safeJson(res,403,{error:'CLIENT_DENIED'});
+  // Reserve BEFORE calling central IAM. At most one issuer replica starts a challenge.
+  let hit=await pool.query(`SELECT challenge_id,options,request_id,state FROM eoc_oidc.passkey_interactions WHERE interaction_id=$1 AND expires_at>clock_timestamp() AND consumed_at IS NULL`,[uid]);
+@@ -89,7 +89,7 @@
+  if(!login.enabled)return safeJson(res,503,{error:'LOGIN_DISABLED'});
+  if(!sameOrigin(req))return safeJson(res,403,{error:'ORIGIN_DENIED'});
+  const details=await provider.interactionDetails(req,res);if(details.uid!==uid||details.prompt?.name!=='login')return safeJson(res,403,{error:'INTERACTION_NOT_AUTHORIZED'});
+- assertPkce(details.params);assertFreshOidcRequest(details.params);
++ assertPkce(details.params);assertFreshInteraction(details.params);
+  const data=await body(req);if(!constantEqual(data.csrf,csrf(uid,req))||!data.credential||typeof data.credential!=='object')return safeJson(res,403,{error:'PROOF_REQUIRED'});
+  const x=await pool.query(`UPDATE eoc_oidc.passkey_interactions SET state='VERIFYING',consumed_at=clock_timestamp()
+  WHERE interaction_id=$1 AND expires_at>clock_timestamp() AND consumed_at IS NULL AND state='CHALLENGE_ISSUED' RETURNING challenge_id,request_id`,[uid]);
+--- a/tests/r5-interaction-freshness.test.mjs
++++ b/tests/r5-interaction-freshness.test.mjs
+@@ -0,0 +1,43 @@
++// r5: the interaction-stage freshness check must accept what oidc-provider 9.x actually stores for a compliant
++// request (max_age=0 normalised away into prompt=login), and must still refuse anything that is not a fresh login.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {assertFreshOidcRequest,assertFreshInteraction,REQUIRED_ACR} from '../src/policy.mjs';
++import {checkMaxAge} from 'oidc-provider/lib/actions/authorization/request_parameters.js';
++
++const raw=()=>({client_id:'c',response_type:'code',scope:'openid',max_age:'0',prompt:'login',acr_values:REQUIRED_ACR,
++  code_challenge:'a'.repeat(43),code_challenge_method:'S256'});
++async function stored(params){ // oidc-provider's own normalisation, run on the request
++  const ctx={oidc:{params:{...params},prompts:new Set(String(params.prompt||'').split(' ').filter(Boolean))}};
++  await checkMaxAge(ctx,async()=>{});return ctx.oidc.params;
++}
++
++test('a compliant EOC request passes /auth and, after oidc-provider normalises it, the interaction check', async()=>{
++  assert.equal(assertFreshOidcRequest(raw()),true);
++  const p=await stored(raw());
++  assert.equal(p.max_age,undefined);                       // what broke r4: max_age is gone after normalisation
++  assert.throws(()=>assertFreshOidcRequest(p),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++  assert.equal(assertFreshInteraction(p),true);
++});
++test('max_age=0 alone is normalised into prompt=login and passes the interaction check', async()=>{
++  const p=await stored({...raw(),prompt:undefined});
++  assert.match(p.prompt,/login/);assert.equal(assertFreshInteraction(p),true);
++});
++test('the interaction check still refuses a non-fresh or downgraded request', ()=>{
++  assert.throws(()=>assertFreshInteraction({prompt:'consent',acr_values:REQUIRED_ACR}),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++  assert.throws(()=>assertFreshInteraction({prompt:'login',max_age:'3600',acr_values:REQUIRED_ACR}),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++  assert.throws(()=>assertFreshInteraction({acr_values:REQUIRED_ACR}),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++  assert.throws(()=>assertFreshInteraction({prompt:'login'}),/REQUIRED_ACR_MISSING/);
++  assert.throws(()=>assertFreshInteraction({prompt:'login',acr_values:'urn:other'}),/REQUIRED_ACR_MISSING/);
++  assert.equal(assertFreshInteraction({prompt:'login',max_age:0,acr_values:REQUIRED_ACR}),true);
++});
++test('/auth stays strict: the raw request must still carry max_age=0 and prompt=login', ()=>{
++  assert.throws(()=>assertFreshOidcRequest({...raw(),max_age:undefined}),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++  assert.throws(()=>assertFreshOidcRequest({...raw(),prompt:'none'}),/FRESH_PASSKEY_LOGIN_REQUIRED/);
++});
++test('server.mjs uses the interaction check on both interaction routes and the strict check on /auth', async()=>{
++  const fs=await import('node:fs');const s=fs.readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');
++  assert.equal((s.match(/assertFreshInteraction\(details\.params\)/g)||[]).length,2);
++  assert.equal((s.match(/assertFreshOidcRequest\(details\.params\)/g)||[]).length,0);
++  assert.match(s,/assertFreshOidcRequest\(Object\.fromEntries\(u\.searchParams\.entries\(\)\)\)/);
++});

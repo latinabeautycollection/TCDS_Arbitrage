@@ -1,0 +1,60 @@
+diff -ruN -x node_modules -x *.jpg r6/src/server.mjs pkg/issuer-v1.2-r7/src/server.mjs
+--- r6/src/server.mjs	2026-11-19 18:38:25
++++ pkg/issuer-v1.2-r7/src/server.mjs	2026-11-19 18:49:13
+@@ -43,7 +43,12 @@
+ if(!Number.isInteger(bindPort)||bindPort<1024||bindPort>65535)throw Error('INVALID_PORT');
+ const allowedHost=new URL(issuer).host;
+ function safeJson(res,status,data,headers={}){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers});res.end(JSON.stringify(data))}
+-function html(res,value,extra={}){res.writeHead(200,{...extra,'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",'x-frame-options':'DENY','referrer-policy':'no-referrer','x-content-type-options':'nosniff'});res.end(value)}
++// r7: the sign-in page posts a form to this origin, then the provider redirects to the EOC callback.
++//  - Referrer-Policy same-origin: with no-referrer the browser sends "Origin: null" on that same-origin form POST and
++//    complete() refused every real browser (ORIGIN_DENIED). same-origin still sends nothing to any other site.
++//  - form-action covers the whole redirect chain after the submit (Chrome), so it lists the registered client's origin.
++const PAGE_CSP=`default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self' ${new URL(redirect).origin}; frame-ancestors 'none'`;
++function html(res,value,extra={}){res.writeHead(200,{...extra,'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':PAGE_CSP,'x-frame-options':'DENY','referrer-policy':'same-origin','x-content-type-options':'nosniff'});res.end(value)}
+ function browserSecret(req){return parseIssuerCookies(req.headers.cookie)['__Host-tcds_oidc_csrf']}
+ function csrf(uid,req){return csrfToken(env.OIDC_PASSKEY_SIGNING_KEY,uid,browserSecret(req))}
+ function sameOrigin(req){return sameOriginRequest(req.headers,issuer)}
+diff -ruN -x node_modules -x *.jpg r6/tests/r6-signin-completion.test.mjs pkg/issuer-v1.2-r7/tests/r6-signin-completion.test.mjs
+--- r6/tests/r6-signin-completion.test.mjs	2026-11-19 18:36:47
++++ pkg/issuer-v1.2-r7/tests/r6-signin-completion.test.mjs	2026-11-19 18:49:13
+@@ -19,10 +19,10 @@
+ test('the ID token carries amr: openid scope claims include amr', () => {
+   assert.match(s, /claims:\{acr:null,auth_time:null,sid:null,iss:null,openid:\['sub','amr'\]\}/);
+ });
+-test('sign-in page: own stylesheet + logo, same-origin only; CSP adds img-src self and form-action self, nothing else', () => {
++test('sign-in page: own stylesheet + logo, same-origin only; CSP adds img-src self and form-action self + the client origin', () => {
+   assert.match(s, /href="\/assets\/passkey-interaction\.css"/);
+   assert.match(s, /src="\/assets\/tcds-logo-wide\.jpg"/);
+-  assert.match(s, /default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'/);
++  assert.match(s, /default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self' \$\{new URL\(redirect\)\.origin\}; frame-ancestors 'none'/);
+   assert.doesNotMatch(s, /style="/);
+   assert.match(s, /id="go"/); assert.match(s, /id="status"/);
+ });
+diff -ruN -x node_modules -x *.jpg r6/tests/r7-browser-form-post.test.mjs pkg/issuer-v1.2-r7/tests/r7-browser-form-post.test.mjs
+--- r6/tests/r7-browser-form-post.test.mjs	1970-01-01 01:00:00
++++ pkg/issuer-v1.2-r7/tests/r7-browser-form-post.test.mjs	2026-11-19 18:49:13
+@@ -0,0 +1,23 @@
++// r7: what a real browser does on the sign-in page's form POST (found on staging: ORIGIN_DENIED).
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++import {sameOriginRequest} from '../src/security-v11.mjs';
++const s = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
++const html = s.slice(s.indexOf('function html('), s.indexOf('function browserSecret('));
++const ISS = 'https://login-stg.tcdsolutionsgroup.com';
++
++test('the HTML page uses Referrer-Policy same-origin (no-referrer makes browsers send Origin: null on the form POST)', () => {
++  assert.match(html, /'referrer-policy':'same-origin'/);
++  assert.doesNotMatch(html, /'referrer-policy':'no-referrer'/);
++});
++test('the origin check itself is unchanged: real origin accepted, null / foreign / cross-site refused', () => {
++  assert.equal(sameOriginRequest({origin: ISS, 'sec-fetch-site': 'same-origin'}, ISS), true);
++  assert.equal(sameOriginRequest({origin: 'null', 'sec-fetch-site': 'same-origin'}, ISS), false);
++  assert.equal(sameOriginRequest({origin: 'https://evil.example', 'sec-fetch-site': 'cross-site'}, ISS), false);
++  assert.equal(sameOriginRequest({origin: ISS, 'sec-fetch-site': 'same-site'}, ISS), false);
++});
++test('JSON responses keep no-referrer; form-action allows exactly self + the registered client origin', () => {
++  assert.match(s, /function safeJson\(res,status,data,headers=\{\}\)\{res\.writeHead\(status,\{[^}]*'referrer-policy':'no-referrer'/);
++  assert.match(s, /form-action 'self' \$\{new URL\(redirect\)\.origin\}; frame-ancestors 'none'/);
++});

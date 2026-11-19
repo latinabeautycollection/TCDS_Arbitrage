@@ -1,0 +1,188 @@
+diff -ruN -x n r5/src/passkey-interaction.css pkg/issuer-v1.2-r6/src/passkey-interaction.css
+--- r5/src/passkey-interaction.css	1970-01-01 01:00:00
++++ pkg/issuer-v1.2-r6/src/passkey-interaction.css	2026-11-19 18:38:47
+@@ -0,0 +1,47 @@
++:root{font-family:'DM Sans',system-ui,-apple-system,'Segoe UI',sans-serif;color:#dfeaf7;background:#081321;-webkit-font-smoothing:antialiased}*{box-sizing:border-box}body{margin:0}button,input{font:inherit}button{cursor:pointer;border:0}button:focus-visible,input:focus-visible{outline:2px solid #6bd7e3;outline-offset:2px}h1,h2,p{margin:0}h1,h2{font-family:Manrope,system-ui,sans-serif}[hidden]{display:none!important}
++.auth-page{background:#080F1D;color:#EFF5FC;min-height:100vh;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center}.auth-ambient{pointer-events:none;position:absolute;inset:0;background:radial-gradient(ellipse at 20% 43%,#1c345060,transparent 48%),radial-gradient(ellipse at 85% 14%,#0c57602a,transparent 40%)}.auth-layout{position:relative;margin:auto;max-width:1320px;width:100%;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(380px,480px);gap:clamp(30px,7vw,110px);padding:65px 46px;align-items:center}.auth-showcase{max-width:680px}.auth-logo{width:min(100%,400px);height:auto;display:block;mix-blend-mode:lighten;margin:0 0 44px}.auth-overline{font-size:11px;letter-spacing:2.4px;font-weight:800;color:#D8AE66}.auth-showcase h1{font:800 clamp(37px,4vw,56px)/1.12 Manrope,system-ui,sans-serif;letter-spacing:-2px;margin:16px 0 22px}.auth-showcase h1 em{font-style:normal;color:#33B9AC}.auth-showcase p{font-size:16px;line-height:1.8;color:#A9BBD1;max-width:580px}.auth-claims{display:grid;gap:15px;margin-top:36px}.auth-claims span{display:flex;align-items:center;gap:11px;color:#C3D6E9;font-size:14px}.auth-claims svg{color:#D8AE66;flex:none}
++.auth-card{border:1px solid #30435D;background:linear-gradient(150deg,#14243a,#0d1b2d);box-shadow:0 36px 100px #020813ad;border-radius:22px;padding:38px;position:relative}.auth-card-head{margin-bottom:27px}.auth-lock{width:49px;height:49px;border-radius:14px;display:grid;place-items:center;background:#1f3c51;color:#E4BB76;margin-bottom:22px}.auth-card-head>span{font-size:10px;letter-spacing:2px;color:#D9B375;font-weight:800}.auth-card-head h2{font-size:29px;letter-spacing:-.7px;margin:12px 0}.auth-card-head p{color:#A9BBD1;font-size:14px;line-height:1.7}
++.auth-label{display:block;color:#d5e4f4;font-size:13px;font-weight:700;margin:18px 0 8px}.auth-label small{color:#89a0b7;font-weight:500}.auth-card input{width:100%;border:1px solid #45617d;border-radius:10px;padding:14px 15px;background:#0d1a2a;color:#EFF5FC;font-size:15px;min-height:48px}.auth-card input::placeholder{color:#89a0b7}
++.auth-submit{margin-top:25px;width:100%;border-radius:10px;background:linear-gradient(110deg,#c89a51,#efd39b);color:#0b1524;padding:15px 17px;min-height:50px;font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.auth-submit:disabled{opacity:.56;cursor:not-allowed}.auth-help{font-size:12px;color:#a9bbd1;line-height:1.7;margin:18px 0}.auth-footer{display:flex;gap:13px;justify-content:space-between;flex-wrap:wrap;padding-top:20px;margin-top:25px;border-top:1px solid #30435D;color:#849eb8;font-size:11px}.auth-error,.auth-note{margin-top:15px;padding:12px;border-radius:8px;font-size:13px;line-height:1.5}.auth-error{background:#42242c;color:#ffd7d7}.auth-note{background:#174036;color:#ccfff0}.auth-page-footer{position:relative;text-align:center;padding:20px;color:#7694ac;font-size:11px}
++.approve-steps{list-style:none;margin:16px 0 0;padding:0;display:grid;grid-template-columns:1fr 1fr;gap:10px}.approve-steps li{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid #30435D;border-radius:12px;background:#0b1727;transition:border-color .2s}.approve-steps i{width:26px;height:26px;border-radius:50%;border:2px solid #4a6280;flex:none;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:800;color:#89a0b7}.approve-steps span{display:block;font-size:13px;font-weight:700;color:#EFF5FC}.approve-steps small{display:block;font-size:12px;color:#89a0b7;margin-top:2px}.approve-steps li.current{border-color:#c89a51}.approve-steps li.current i{border-color:#E4BB76;color:#E4BB76}.approve-steps li.current small{color:#E4BB76}.approve-steps li.done{border-color:#2b7f6f}.approve-steps li.done i{background:#33B9AC;border-color:#33B9AC;color:#071523}.approve-steps li.done small{color:#8fe3d6}
++.approve-share{margin-top:18px;padding:14px 16px;border:1px solid #30435D;border-radius:12px;background:#0b1727}.approve-share p{font-size:13px;line-height:1.6;color:#A9BBD1}.approve-share p b{color:#EFF5FC}.approve-link{display:flex;gap:8px;margin-top:10px}.approve-link input{flex:1;min-width:0;min-height:42px!important;padding:10px 12px!important;font-size:12px!important;color:#C3D6E9!important}.approve-link button{flex:none;border-radius:10px;padding:0 14px;background:#1f3c51;color:#E4BB76;font-size:13px;font-weight:800}.approve-live{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:#89a0b7}.approve-live:not(:empty)::before{content:'';width:7px;height:7px;border-radius:50%;background:#33B9AC;animation:tcds-pulse 1.6s ease-in-out infinite}@keyframes tcds-pulse{50%{opacity:.25}}@media(prefers-reduced-motion:reduce){.approve-live::before{animation:none}}
++@media(max-width:450px){.approve-steps{grid-template-columns:1fr}}
++.approve-items{list-style:none;margin:12px 0 0;padding:12px 0 0;border-top:1px solid #30435D;display:flex;flex-wrap:wrap;gap:6px}.approve-items li{font-size:12px;font-weight:700;color:#C3D6E9;background:#14243a;border:1px solid #30435D;border-radius:999px;padding:4px 10px}
++.approve-fp{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.3px;white-space:nowrap}.approve-window{margin-top:14px;padding:11px 13px;border-radius:10px;border:1px solid #c89a51;background:#2a2213;color:#F2D9A6;font-size:13px;line-height:1.5}.approve-window b{font-variant-numeric:tabular-nums;color:#FFE7B8}
++.approve-rows{display:grid;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #30435D}.approve-rows div{display:flex;justify-content:space-between;gap:12px}.approve-rows span{font-size:11px;letter-spacing:1.6px;color:#D9B375;font-weight:800}.approve-rows b{font-size:14px;color:#EFF5FC;text-align:right}
++.enroll-invitee{display:grid;gap:4px;background:#0b1727;border:1px solid #30435D;border-radius:12px;padding:14px 16px}.enroll-invitee span{font-size:10px;letter-spacing:2px;color:#D9B375;font-weight:800}.enroll-invitee strong{font:700 18px Manrope,system-ui,sans-serif;color:#EFF5FC}.enroll-invitee small{color:#A9BBD1;font-size:12px}
++@media(max-width:920px){.auth-layout{grid-template-columns:1fr;max-width:620px;gap:34px;padding:37px 22px}.auth-logo{width:300px;margin:0 0 28px}.auth-showcase h1{font-size:36px}.auth-claims{display:none}.auth-showcase p{font-size:14px}.auth-card{padding:27px}}@media(max-width:450px){.auth-showcase h1{font-size:29px;letter-spacing:-1px}.auth-card{padding:23px}.auth-logo{width:240px}}
++/* Approval card, compact (2026-11-19): the whole decision and its button fit one laptop screen. */
++.approve-layout{padding-top:28px;padding-bottom:24px}.approve-card{padding:28px 30px}
++.approve-head{margin-bottom:16px}.approve-kicker{display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:2px;color:#D9B375;font-weight:800}.approve-kicker svg{width:16px;height:16px;flex:none;color:#E4BB76}
++.approve-head h2{font-size:25px;letter-spacing:-.5px;margin:9px 0 4px}.approve-head p{color:#A9BBD1;font-size:14px;line-height:1.5}
++.approve-summary{background:#0b1727;border:1px solid #30435D;border-radius:12px;padding:14px 16px}
++.approve-person strong{display:block;font:700 17px Manrope,system-ui,sans-serif;color:#EFF5FC}.approve-person small{color:#A9BBD1;font-size:12px}
++.approve-facts{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;margin:12px 0 0;padding-top:12px;border-top:1px solid #30435D}.approve-facts>div{min-width:0}.approve-facts .wide{grid-column:1/-1}
++.approve-facts dt{font-size:10px;letter-spacing:1.5px;color:#D9B375;font-weight:800;text-transform:uppercase}.approve-facts dd{margin:3px 0 0;font-size:13.5px;line-height:1.35;font-weight:700;color:#EFF5FC;overflow-wrap:anywhere}
++.approve-mods{margin-top:12px;padding-top:10px;border-top:1px solid #30435D}.approve-mods summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:#C3D6E9}
++.approve-mods summary::-webkit-details-marker{display:none}.approve-mods summary::after{content:'Show';font-size:12px;font-weight:800;color:#E4BB76}.approve-mods[open] summary::after{content:'Hide'}
++.approve-mods summary:focus-visible{outline:2px solid #6bd7e3;outline-offset:3px;border-radius:4px}.approve-mods .approve-items{border-top:0;padding-top:0;margin-top:10px}
++.approve-card .approve-steps{margin-top:14px}.approve-card .approve-steps li{padding:9px 12px}.approve-card .auth-submit{margin-top:16px}
++.approve-card .auth-help{margin:12px 0 0;font-size:12px;line-height:1.6}.approve-card .auth-footer{margin-top:16px;padding-top:14px}.approve-card .approve-share{margin-top:14px}
++@media(max-width:450px){.approve-card{padding:22px 20px}.approve-facts{grid-template-columns:1fr}}
++/* Wide screens: a two-pane decision panel (what is approved | progress and action), so nothing falls below the fold. */
++@media(min-width:1180px){
++ .approve-layout{grid-template-columns:minmax(330px,1fr) minmax(700px,800px);gap:clamp(28px,3.5vw,60px)}
++ .approve-layout .auth-showcase h1{font-size:clamp(34px,3.2vw,48px)}.approve-layout .auth-logo{width:min(100%,340px);margin-bottom:34px}
++ .approve-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
++ .approve-card .approve-act .approve-steps{margin-top:0}
++}
++/* Top-aligned columns (2026-11-19): the logo starts level with the card however tall the card grows. */
++.auth-layout{align-items:start}.auth-showcase{padding-top:6px}
++/* Card legibility (2026-11-19): the device's own UI font at larger sizes and higher contrast. */
++.auth-card{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,Roboto,'Helvetica Neue',sans-serif;-webkit-font-smoothing:antialiased}
++.auth-card-head>span{font-size:13px;letter-spacing:1.8px;color:#E4C084;font-weight:800}.auth-card-head h2{font-size:31px;margin:12px 0 10px}.auth-card-head p{font-size:17px;line-height:1.6;color:#D6E2EE;font-weight:500}.auth-submit{font-size:16px;min-height:56px;letter-spacing:.2px}.auth-help{font-size:14.5px;line-height:1.65;color:#C2D0DE}.auth-help b{color:#EFF5FC}.auth-label{font-size:14.5px}.auth-card input{font-size:16px}.auth-error,.auth-note{font-size:14.5px;line-height:1.55}.auth-footer{font-size:12.5px;color:#9DB2C7}.enroll-invitee span{font-size:11.5px;letter-spacing:1.8px}.enroll-invitee strong{font-size:20px}.enroll-invitee small{font-size:13.5px;color:#B9C9DA}
++@media(max-width:450px){.auth-card-head h2{font-size:27px}.auth-card-head p{font-size:16px}}
++/* issuer sign-in (r6) */
++.signin-card{max-width:480px}.signin-card .auth-submit{margin-top:22px}
++.signin-kicker{display:flex;align-items:center;gap:8px;font-size:10px;letter-spacing:2px;color:#D9B375;font-weight:800}.signin-kicker svg{width:16px;height:16px;color:#E4BB76;flex:none}
++.signin-card h2{font-size:27px;letter-spacing:-.6px;margin:10px 0 6px}.signin-card .lead{color:#A9BBD1;font-size:14px;line-height:1.6}
++.signin-steps{list-style:none;margin:18px 0 0;padding:14px 16px;border:1px solid #30435D;border-radius:12px;background:#0b1727;display:grid;gap:9px}
++.signin-steps li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;color:#C3D6E9}.signin-steps b{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#1f3c51;color:#E4BB76;font-size:11px}
++#status:not(:empty){margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px;line-height:1.5;background:#174036;color:#ccfff0}#status.err{background:#42242c;color:#ffd7d7}
+diff -ruN -x n r5/src/passkey-interaction.js pkg/issuer-v1.2-r6/src/passkey-interaction.js
+--- r5/src/passkey-interaction.js	2026-11-19 18:18:24
++++ pkg/issuer-v1.2-r6/src/passkey-interaction.js	2026-11-19 18:38:47
+@@ -4,7 +4,7 @@
+ function decode(v){const s=v.replace(/-/g,'+').replace(/_/g,'/');const raw=atob(s.padEnd(Math.ceil(s.length/4)*4,'='));return Uint8Array.from(raw,c=>c.charCodeAt(0))}
+ function encode(v){return btoa(String.fromCharCode(...new Uint8Array(v))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+ button.onclick=async()=>{
+- button.disabled=true;status.textContent='Checking your passkey…';
++ button.disabled=true;status.className='';status.textContent='Waiting for your passkey…';
+  try{
+   const o=await fetch(`/interaction/${encodeURIComponent(uid)}/options`,{credentials:'same-origin',cache:'no-store'});
+   if(!o.ok)throw Error('Unable to start secure sign-in');const {options,csrf}=await o.json();
+@@ -22,5 +22,5 @@
+   }
+   document.body.appendChild(form);form.submit();
+ 
+- }catch(e){status.textContent=e instanceof Error?e.message:'Sign-in failed';button.disabled=false;}
++ }catch(e){status.className='err';status.textContent=e&&e.name==='NotAllowedError'?'The passkey prompt was cancelled or timed out. Select Use passkey to try again.':(e instanceof Error?e.message:'Sign-in failed. Try again.');button.disabled=false;}
+ };
+diff -ruN -x n r5/src/server.mjs pkg/issuer-v1.2-r6/src/server.mjs
+--- r5/src/server.mjs	2026-11-19 18:18:24
++++ pkg/issuer-v1.2-r6/src/server.mjs	2026-11-19 18:38:47
+@@ -23,6 +23,9 @@
+  features:{devInteractions:{enabled:false},registration:{enabled:false},clientCredentials:{enabled:false},deviceFlow:{enabled:false},resourceIndicators:{enabled:false},introspection:{enabled:false}},
+  pkce:{required:()=>true}, responseTypes:['code'],
+  acrValues:[REQUIRED_ACR], scopes:['openid'], subjectTypes:['public'],
++ // r6: the ID token carries only the claims of the granted scope (+ explicitly requested ones); openid covered only sub,
++ // so the login's amr was dropped and the EOC (which requires amr incl. webauthn) would refuse every sign-in.
++ claims:{acr:null,auth_time:null,sid:null,iss:null,openid:['sub','amr']},
+  cookies:{keys:env.OIDC_COOKIE_KEYS.split(',').map(v=>v.trim()),short:{httpOnly:true,sameSite:'lax',secure:true},long:{httpOnly:true,sameSite:'lax',secure:true}},
+  ttl:{AuthorizationCode:90,AccessToken:300,IdToken:300,Interaction:180,Session:300},
+  interactions:{url:(_ctx,interaction)=>`/interaction/${interaction.uid}`},
+@@ -40,7 +43,7 @@
+ if(!Number.isInteger(bindPort)||bindPort<1024||bindPort>65535)throw Error('INVALID_PORT');
+ const allowedHost=new URL(issuer).host;
+ function safeJson(res,status,data,headers={}){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers});res.end(JSON.stringify(data))}
+-function html(res,value,extra={}){res.writeHead(200,{...extra,'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'",'x-frame-options':'DENY','referrer-policy':'no-referrer','x-content-type-options':'nosniff'});res.end(value)}
++function html(res,value,extra={}){res.writeHead(200,{...extra,'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':"default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",'x-frame-options':'DENY','referrer-policy':'no-referrer','x-content-type-options':'nosniff'});res.end(value)}
+ function browserSecret(req){return parseIssuerCookies(req.headers.cookie)['__Host-tcds_oidc_csrf']}
+ function csrf(uid,req){return csrfToken(env.OIDC_PASSKEY_SIGNING_KEY,uid,browserSecret(req))}
+ function sameOrigin(req){return sameOriginRequest(req.headers,issuer)}
+@@ -75,7 +78,7 @@
+  const existing=browserSecret(req),secret=existing&&/^[0-9a-f]{64}$/.test(existing)?existing:randomBytes(32).toString('hex');
+  const cookie=`__Host-tcds_oidc_csrf=${secret}; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=180`;
+  // Passkey is requested in the laptop browser; no Warehouse device enrollment.
+- return html(res,`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>TCDS Enterprise sign-in</title><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><main><h1>TCDS EOC sign-in</h1><p>Sign in with your approved passkey or security key.</p><button id="go" type="button">Use passkey</button><p id="status" role="status"></p></main><script src="/assets/passkey-interaction.js" defer></script></body></html>`, {'set-cookie':cookie});
++ return html(res,`<!doctype html><html lang="en"><head><meta charset="utf-8"><title>TCDS · EOC sign-in</title><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/assets/passkey-interaction.css"></head><body><main class="auth-page"><div class="auth-ambient" aria-hidden="true"></div><section class="auth-layout" aria-label="TCDS EOC sign-in"><div class="auth-showcase"><img class="auth-logo" src="/assets/tcds-logo-wide.jpg" width="830" height="380" alt="TCDS Total Coverage Database Solutions gold shield and wordmark"><span class="auth-overline">ENTERPRISE OPERATIONS CENTER</span><h1>Sign in with<br><em>your passkey.</em></h1><p>Your passkey stays on this laptop and is unlocked only by you. No password is used or sent.</p></div><div class="auth-card signin-card"><span class="signin-kicker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>TCDS · SECURE SIGN-IN</span><h2>Confirm it's you</h2><p class="lead">Select Use passkey. Your laptop asks for your fingerprint, face or device PIN.</p><ol class="signin-steps"><li><b>1</b><span>Choose <strong>your own</strong> passkey in the list your browser shows.</span></li><li><b>2</b><span>Confirm with fingerprint, face or PIN.</span></li><li><b>3</b><span>You return to the EOC, signed in.</span></li></ol><button id="go" class="auth-submit" type="button">Use passkey</button><p id="status" role="status" aria-live="polite"></p><div class="auth-footer"><span>Encrypted transport required</span><span>Access is centrally governed</span></div></div></section><footer class="auth-page-footer">© 2026 Total Coverage Database Solutions · Authorized personnel only</footer></main><script src="/assets/passkey-interaction.js" defer></script></body></html>`, {'set-cookie':cookie});
+ }
+ async function options(req,res,uid){
+  if(!safeUid(uid)||req.headers['sec-fetch-site']==='cross-site')return safeJson(res,403,{error:'INVALID_INTERACTION'});
+@@ -94,11 +97,11 @@
+  const x=await pool.query(`UPDATE eoc_oidc.passkey_interactions SET state='VERIFYING',consumed_at=clock_timestamp()
+  WHERE interaction_id=$1 AND expires_at>clock_timestamp() AND consumed_at IS NULL AND state='CHALLENGE_ISSUED' RETURNING challenge_id,request_id`,[uid]);
+  if(x.rowCount!==1)return safeJson(res,401,{error:'CHALLENGE_REPLAY_OR_EXPIRED'});
+- let login;
+- try {login=await verifier.finish({interactionId:uid,requestId:x.rows[0].request_id,issuer,challengeId:x.rows[0].challenge_id,credential:data.credential});
++ let verified; // r6: renamed from "login", which shadowed the module login gate (TDZ error at the gate check above)
++ try {verified=await verifier.finish({interactionId:uid,requestId:x.rows[0].request_id,issuer,challengeId:x.rows[0].challenge_id,credential:data.credential});
+   // Recheck binding and account state after verification to prevent mid-ceremony revocation.
+-  const admitted=await verifier.checkSubject({issuer,subject:login.accountId});
+-  if(!admitted||admitted.userId!==login.iamUserId)throw Error('IAM_VERIFIER_SUBJECT_MISMATCH');
++  const admitted=await verifier.checkSubject({issuer,subject:verified.accountId});
++  if(!admitted||admitted.userId!==verified.iamUserId)throw Error('IAM_VERIFIER_SUBJECT_MISMATCH');
+   const tx=await pool.connect();
+   try {await tx.query('BEGIN');
+    await tx.query(`INSERT INTO eoc_oidc.issuer_security_events(request_id,category,interaction_hash) VALUES($1,$2,$3)`,[x.rows[0].request_id,'LOGIN_PASSKEY_VERIFIED',hashHex(uid)]);
+@@ -108,10 +111,18 @@
+  }catch(e){await pool.query(`UPDATE eoc_oidc.passkey_interactions SET state='FAILED' WHERE interaction_id=$1 AND state='VERIFYING'`,[uid]);throw e}
+  // OIDC provider is responsible for code/session issuance. A transient failure here fails
+  // terminally and requires a fresh interaction, never reusing the verified challenge.
+- const {accountId,acr,amr,ts,remember}=login;
+- return provider.interactionFinished(req,res,{login:{accountId,acr,amr,ts,remember},consent:{}},{mergeWithLastSubmission:false});
++ const {accountId,acr,amr,ts,remember}=verified;
++ // r6: oidc-provider 9 asks for consent unless a Grant covers the request; without one it opened a second
++ // ('consent') interaction that begin() refuses (LOGIN_REQUIRED). The EOC is the single registered first-party client
++ // and openid the only scope, so the verified login records exactly that grant: this client, scope openid.
++ if(details.params.client_id!==env.OIDC_CLIENT_ID)return safeJson(res,403,{error:'CLIENT_DENIED'});
++ const grant=new provider.Grant({accountId,clientId:details.params.client_id});grant.addOIDCScope('openid');
++ const grantId=await grant.save();
++ return provider.interactionFinished(req,res,{login:{accountId,acr,amr,ts,remember},consent:{grantId}},{mergeWithLastSubmission:false});
+ }
+ const js=readFileSync(new URL('./passkey-interaction.js',import.meta.url));
++// r6: the sign-in page's own stylesheet and logo (same look as the login-stg enrollment page), same-origin only.
++const css=readFileSync(new URL('./passkey-interaction.css',import.meta.url)),logo=readFileSync(new URL('./tcds-logo-wide.jpg',import.meta.url));
+ const server=createServer(async(req,res)=>{
+  try{
+   const u=new URL(req.url,issuer);
+@@ -122,6 +133,8 @@
+   if(u.pathname==='/internal/health/ready'){
+    await pool.query('SELECT 1 FROM eoc_oidc.artifacts LIMIT 1');await verifier.readiness();return safeJson(res,200,{ready:true,database:true,iamBridge:true,issuerConfigured:true,loginEnabled:login.enabled,certified:false});
+   }
++  if(u.pathname==='/assets/passkey-interaction.css'&&req.method==='GET'){res.writeHead(200,{'content-type':'text/css; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(css)}
++  if(u.pathname==='/assets/tcds-logo-wide.jpg'&&req.method==='GET'){res.writeHead(200,{'content-type':'image/jpeg','cache-control':'public, max-age=86400','x-content-type-options':'nosniff'});return res.end(logo)}
+   if(u.pathname==='/assets/passkey-interaction.js'&&req.method==='GET'){
+     res.writeHead(200,{'content-type':'application/javascript; charset=utf-8','cache-control':'no-store','x-content-type-options':'nosniff'});return res.end(js);
+   }
+diff -ruN -x n r5/tests/r6-signin-completion.test.mjs pkg/issuer-v1.2-r6/tests/r6-signin-completion.test.mjs
+--- r5/tests/r6-signin-completion.test.mjs	1970-01-01 01:00:00
++++ pkg/issuer-v1.2-r6/tests/r6-signin-completion.test.mjs	2026-11-19 18:38:47
+@@ -0,0 +1,28 @@
++// r6: the three faults that stopped every real browser sign-in after r5, found by driving the full code flow through
++// the real server.mjs + oidc-provider (see r6_full_flow/ in the deploy package). These pin the fixes in the source.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++const s = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
++const complete = s.slice(s.indexOf('async function complete('), s.indexOf('const js=readFileSync'));
++
++test('completion does not shadow the login gate (r5: "Cannot access \'login\' before initialization")', () => {
++  assert.match(complete, /if\(!login\.enabled\)return safeJson\(res,503,\{error:'LOGIN_DISABLED'\}\)/);
++  assert.doesNotMatch(complete, /\b(let|const|var)\s+login\b/);
++});
++test('a verified login records the grant (this client, scope openid) so no second consent interaction opens', () => {
++  assert.match(complete, /new provider\.Grant\(\{accountId,clientId:details\.params\.client_id\}\);grant\.addOIDCScope\('openid'\)/);
++  assert.match(complete, /consent:\{grantId\}/);
++  assert.doesNotMatch(complete, /consent:\{\}/);
++  assert.match(complete, /details\.params\.client_id!==env\.OIDC_CLIENT_ID\)return safeJson\(res,403,\{error:'CLIENT_DENIED'\}\)/);
++});
++test('the ID token carries amr: openid scope claims include amr', () => {
++  assert.match(s, /claims:\{acr:null,auth_time:null,sid:null,iss:null,openid:\['sub','amr'\]\}/);
++});
++test('sign-in page: own stylesheet + logo, same-origin only; CSP adds img-src self and form-action self, nothing else', () => {
++  assert.match(s, /href="\/assets\/passkey-interaction\.css"/);
++  assert.match(s, /src="\/assets\/tcds-logo-wide\.jpg"/);
++  assert.match(s, /default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'/);
++  assert.doesNotMatch(s, /style="/);
++  assert.match(s, /id="go"/); assert.match(s, /id="status"/);
++});
+diff -ruN -x n r5/tests/v11-security.test.mjs pkg/issuer-v1.2-r6/tests/v11-security.test.mjs
+--- r5/tests/v11-security.test.mjs	2026-11-19 18:18:24
++++ pkg/issuer-v1.2-r6/tests/v11-security.test.mjs	2026-11-19 18:38:47
+@@ -67,4 +67,4 @@
+  assert.match(s,/ADD COLUMN IF NOT EXISTS state/);assert.doesNotMatch(s,/eoc_resolve_federation_v623|ALTER TABLE warehouse_identity/);
+ });
+ 
+-test('issuer checks verified IAM UUID against 623 mapping before login completion',()=>{const s=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');assert.match(s,/admitted\.userId!==login\.iamUserId/);assert.match(s,/provider\.interactionFinished\(req,res,\{login:\{accountId,acr,amr,ts,remember\}/)});
++test('issuer checks verified IAM UUID against 623 mapping before login completion',()=>{const s=readFileSync(new URL('../src/server.mjs',import.meta.url),'utf8');assert.match(s,/admitted\.userId!==verified\.iamUserId/);assert.match(s,/provider\.interactionFinished\(req,res,\{login:\{accountId,acr,amr,ts,remember\}/)});
