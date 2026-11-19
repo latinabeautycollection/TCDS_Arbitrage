@@ -58,6 +58,21 @@ describe("6.2D bundle guard", () => {
     expect(result.output).toMatch(/missing/);
   });
 
+  it("ignores lazy chunks that the entry names by file", () => {
+    const entry =
+      'const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/PackShipScannerPanel-B94XfaNy.js","assets/scanditDataCaptureView-CgZEm3Cf.js"])))=>i.map(i=>d[i]);' +
+      'const load=()=>import("./scanditDataCaptureView-CgZEm3Cf.js");';
+    const result = run(build(entry));
+    expect(result.code).toBe(0);
+    expect(result.output).toMatch(/no Scandit SDK/);
+  });
+
+  it("still fails when SDK code sits beside such a file name", () => {
+    const result = run(build('const d=["assets/scanditDataCaptureView-CgZEm3Cf.js"];class DataCaptureView extends HTMLElement {}'));
+    expect(result.code).toBe(1);
+    expect(result.output).toMatch(/contains the Scandit SDK \(DataCaptureView\)/);
+  });
+
   it("checks every preloaded chunk as well as the entry", () => {
     const result = run(build('console.log("app");', 'console.log("vendor");'));
     expect(result.code).toBe(0);

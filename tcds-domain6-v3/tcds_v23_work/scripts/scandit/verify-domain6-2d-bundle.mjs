@@ -21,6 +21,10 @@ const SDK_MARKERS = [
   "sdc-lib",
 ];
 
+// Vite names lazy chunks inside the entry (__vite__mapDeps, dynamic imports). A chunk
+// named after an SDK module is not the SDK, so quoted file names are removed first.
+const CHUNK_FILE_NAME = /["'`](?:\.{0,2}\/)?(?:assets\/)?[\w.-]+\.(?:m?js|css)["'`]/g;
+
 function fail(message) {
   console.error(`Domain 6.2D bundle verification FAILED: ${message}`);
   process.exit(1);
@@ -50,7 +54,7 @@ for (const reference of [...entries, ...preloads]) {
   const chunk = reference.replace(/^\//, "");
   const file = path.join(dist, chunk);
   if (!fs.existsSync(file)) fail(`${chunk} is referenced but missing.`);
-  const text = fs.readFileSync(file, "utf8");
+  const text = fs.readFileSync(file, "utf8").replace(CHUNK_FILE_NAME, "");
   const found = SDK_MARKERS.filter((marker) => text.includes(marker));
   if (found.length) {
     fail(`${chunk} contains the Scandit SDK (${found.join(", ")}). Load scanning screens lazily.`);
