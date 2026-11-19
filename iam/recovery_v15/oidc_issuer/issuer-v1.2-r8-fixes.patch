@@ -1,0 +1,125 @@
+diff -ruN -x node_modules -x *.jpg r7/src/passkey-interaction.css pkg/issuer-v1.2-r8/src/passkey-interaction.css
+--- r7/src/passkey-interaction.css	2026-11-19 18:49:13
++++ pkg/issuer-v1.2-r8/src/passkey-interaction.css	2026-11-19 23:00:29
+@@ -45,3 +45,4 @@
+ .signin-steps{list-style:none;margin:18px 0 0;padding:14px 16px;border:1px solid #30435D;border-radius:12px;background:#0b1727;display:grid;gap:9px}
+ .signin-steps li{display:flex;gap:10px;align-items:flex-start;font-size:13px;line-height:1.5;color:#C3D6E9}.signin-steps b{flex:none;width:20px;height:20px;border-radius:50%;display:grid;place-items:center;background:#1f3c51;color:#E4BB76;font-size:11px}
+ #status:not(:empty){margin-top:14px;padding:11px 12px;border-radius:8px;font-size:13px;line-height:1.5;background:#174036;color:#ccfff0}#status.err{background:#42242c;color:#ffd7d7}
++.signin-ref{margin-top:14px;font-size:12px;color:#89a0b7;letter-spacing:.3px}.signin-card a.auth-submit{text-decoration:none}
+diff -ruN -x node_modules -x *.jpg r7/src/server.mjs pkg/issuer-v1.2-r8/src/server.mjs
+--- r7/src/server.mjs	2026-11-19 18:49:13
++++ pkg/issuer-v1.2-r8/src/server.mjs	2026-11-19 23:00:29
+@@ -29,6 +29,8 @@
+  cookies:{keys:env.OIDC_COOKIE_KEYS.split(',').map(v=>v.trim()),short:{httpOnly:true,sameSite:'lax',secure:true},long:{httpOnly:true,sameSite:'lax',secure:true}},
+  ttl:{AuthorizationCode:90,AccessToken:300,IdToken:300,Interaction:180,Session:300},
+  interactions:{url:(_ctx,interaction)=>`/interaction/${interaction.uid}`},
++ // r8: the provider's own error responses for browsers (expired or reused links, bad requests): the same readable page.
++ async renderError(ctx,out){const p=errorPageParts(out?.error);console.error('ISSUER_ERROR_PAGE',p.kind,String(out?.error).slice(0,60),'ref='+p.ref);ctx.set(p.headers);ctx.body=p.html},
+  async findAccount(_ctx,id){
+    if(!login.enabled)return undefined; // no account => no code/token/claims while login is disabled
+    if(!/^[-A-Za-z0-9._~]{16,255}$/.test(id))return undefined;
+@@ -42,13 +44,45 @@
+ const bindHost='127.0.0.1',bindPort=Number(env.OIDC_PORT||8401);
+ if(!Number.isInteger(bindPort)||bindPort<1024||bindPort>65535)throw Error('INVALID_PORT');
+ const allowedHost=new URL(issuer).host;
+-function safeJson(res,status,data,headers={}){res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers});res.end(JSON.stringify(data))}
++function safeJson(res,status,data,headers={}){if(status>=400&&res.tcdsNavigation)return errorPage(res,status,res.tcdsReason||data?.error);res.writeHead(status,{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers});res.end(JSON.stringify(data))}
+ // r7: the sign-in page posts a form to this origin, then the provider redirects to the EOC callback.
+ //  - Referrer-Policy same-origin: with no-referrer the browser sends "Origin: null" on that same-origin form POST and
+ //    complete() refused every real browser (ORIGIN_DENIED). same-origin still sends nothing to any other site.
+ //  - form-action covers the whole redirect chain after the submit (Chrome), so it lists the registered client's origin.
+ const PAGE_CSP=`default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self' ${new URL(redirect).origin}; frame-ancestors 'none'`;
+ function html(res,value,extra={}){res.writeHead(200,{...extra,'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':PAGE_CSP,'x-frame-options':'DENY','referrer-policy':'same-origin','x-content-type-options':'nosniff'});res.end(value)}
++// r8: a person in a browser gets a readable page, never raw JSON. Browser page navigations (Sec-Fetch-Mode navigate,
++// or an HTML Accept without fetch metadata) that end in an error are rendered with the sign-in page's look; the page's own
++// fetch() calls, health checks and server-to-server calls keep the JSON contract unchanged. Only fixed text is shown,
++// never request data; the reference is a random id that is also logged, for support.
++const ERROR_COPY={
++ ACCESS:{title:"This passkey can't open the EOC",text:"It isn't approved for the Enterprise Operations Center, or its account isn't active. If you should have access, ask your identity administrator."},
++ EXPIRED:{title:'This sign-in has expired',text:'A sign-in works once and only for a few minutes. Start again from the EOC.'},
++ BROWSER:{title:"We couldn't verify this browser",text:'Start the sign-in again from the EOC, in the same browser tab.'},
++ OFF:{title:'Sign-in is temporarily unavailable',text:'The sign-in service is paused right now. Please try again later.'},
++ GENERIC:{title:"We couldn't sign you in",text:'Something went wrong while signing you in. Start again from the EOC. If it keeps happening, give your administrator the reference below.'}};
++const ERROR_CLASS={IAM_VERIFIER_DENIED:'ACCESS',UNVERIFIED_FEDERATED_SUBJECT:'ACCESS',IAM_SUBJECT_INACTIVE_OR_UNVERIFIED:'ACCESS',IAM_VERIFIER_SUBJECT_MISMATCH:'ACCESS',
++ CENTRAL_IAM_PASSKEY_ASSURANCE_FAILED:'ACCESS',FEDERATION_SUBJECT_INVALID:'ACCESS',ACR_AMR_NOT_ATTESTED:'ACCESS',CLIENT_DENIED:'ACCESS',UNKNOWN_CLIENT:'ACCESS',
++ invalid_client:'ACCESS',unauthorized_client:'ACCESS',
++ CHALLENGE_REPLAY_OR_EXPIRED:'EXPIRED',CHALLENGE_EXPIRED:'EXPIRED',CHALLENGE_PENDING_OR_EXPIRED:'EXPIRED',PROOF_STALE:'EXPIRED',LOGIN_REQUIRED:'EXPIRED',
++ INTERACTION_NOT_AUTHORIZED:'EXPIRED',INVALID_INTERACTION:'EXPIRED',FRESH_PASSKEY_LOGIN_REQUIRED:'EXPIRED',invalid_request:'EXPIRED',SessionNotFound:'EXPIRED',
++ session_not_found:'EXPIRED',login_required:'EXPIRED',interaction_required:'EXPIRED',
++ ORIGIN_DENIED:'BROWSER',PROOF_REQUIRED:'BROWSER',BROWSER_BINDING_REQUIRED:'BROWSER',CONTENT_TYPE_REQUIRED:'BROWSER',LOGIN_DISABLED:'OFF'};
++export function errorPageParts(code){
++ const kind=ERROR_CLASS[code]||'GENERIC',c=ERROR_COPY[kind],ref=randomBytes(4).toString('hex').toUpperCase();
++ const back=new URL(redirect).origin+'/';
++ const body='<!doctype html><html lang="en"><head><meta charset="utf-8"><title>TCDS · EOC sign-in</title><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><link rel="stylesheet" href="/assets/passkey-interaction.css"></head>'+
++  '<body><main class="auth-page"><div class="auth-ambient" aria-hidden="true"></div><section class="auth-layout" aria-label="TCDS EOC sign-in">'+
++  '<div class="auth-showcase"><img class="auth-logo" src="/assets/tcds-logo-wide.jpg" width="830" height="380" alt="TCDS Total Coverage Database Solutions gold shield and wordmark">'+
++  '<span class="auth-overline">ENTERPRISE OPERATIONS CENTER</span><h1>Sign-in<br><em>not completed.</em></h1><p>Nothing was signed in and no access was given.</p></div>'+
++  '<div class="auth-card signin-card" role="alert"><span class="signin-kicker"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>TCDS · SECURE SIGN-IN</span><h2>'+c.title+'</h2><p class="lead">'+c.text+'</p>'+
++  '<a class="auth-submit" href="'+back+'">Return to the EOC</a><p class="signin-ref">Reference '+ref+'</p>'+
++  '<div class="auth-footer"><span>Encrypted transport required</span><span>Access is centrally governed</span></div></div>'+
++  '</section><footer class="auth-page-footer">© 2026 Total Coverage Database Solutions · Authorized personnel only</footer></main></body></html>';
++ return {kind,ref,html:body,headers:{'content-type':'text/html; charset=utf-8','cache-control':'no-store','content-security-policy':PAGE_CSP,'x-frame-options':'DENY','referrer-policy':'same-origin','x-content-type-options':'nosniff'}};
++}
++function errorPage(res,status,code){const p=errorPageParts(code);console.error('ISSUER_ERROR_PAGE',p.kind,String(code).slice(0,60),'ref='+p.ref);res.writeHead(status,p.headers);res.end(p.html)}
++const isNavigation=req=>req.headers['sec-fetch-mode']==='navigate'||(!req.headers['sec-fetch-mode']&&/text\/html/.test(String(req.headers.accept||'')));
+ function browserSecret(req){return parseIssuerCookies(req.headers.cookie)['__Host-tcds_oidc_csrf']}
+ function csrf(uid,req){return csrfToken(env.OIDC_PASSKEY_SIGNING_KEY,uid,browserSecret(req))}
+ function sameOrigin(req){return sameOriginRequest(req.headers,issuer)}
+@@ -129,6 +163,7 @@
+ // r6: the sign-in page's own stylesheet and logo (same look as the login-stg enrollment page), same-origin only.
+ const css=readFileSync(new URL('./passkey-interaction.css',import.meta.url)),logo=readFileSync(new URL('./tcds-logo-wide.jpg',import.meta.url));
+ const server=createServer(async(req,res)=>{
++ res.tcdsNavigation=isNavigation(req);
+  try{
+   const u=new URL(req.url,issuer);
+   if(req.headers.host!==allowedHost)return safeJson(res,421,{error:'INVALID_HOST'});
+@@ -159,7 +194,7 @@
+   }
+   // oidc-provider is the sole protocol implementation. No custom token or JWKS issuance.
+   return provider.callback()(req,res);
+- }catch(err){console.error('ISSUER_REQUEST_REJECTED',String(err.message||err).slice(0,80));if(!res.headersSent)return safeJson(res,401,{error:'AUTHENTICATION_UNAVAILABLE'});res.end()}
++ }catch(err){console.error('ISSUER_REQUEST_REJECTED',String(err.message||err).slice(0,80));res.tcdsReason=String(err.message||err).slice(0,80);if(!res.headersSent)return safeJson(res,401,{error:'AUTHENTICATION_UNAVAILABLE'});res.end()}
+ });
+ server.listen(bindPort,bindHost,()=>console.log(`TCDS OIDC issuer bound to ${bindHost}:${bindPort}; public issuer ${issuer}`));
+ process.on('SIGTERM',()=>{server.close(()=>pool.end().finally(()=>process.exit(0)))});
+diff -ruN -x node_modules -x *.jpg r7/tests/r7-browser-form-post.test.mjs pkg/issuer-v1.2-r8/tests/r7-browser-form-post.test.mjs
+--- r7/tests/r7-browser-form-post.test.mjs	2026-11-19 18:49:13
++++ pkg/issuer-v1.2-r8/tests/r7-browser-form-post.test.mjs	2026-11-19 23:00:29
+@@ -18,6 +18,6 @@
+   assert.equal(sameOriginRequest({origin: ISS, 'sec-fetch-site': 'same-site'}, ISS), false);
+ });
+ test('JSON responses keep no-referrer; form-action allows exactly self + the registered client origin', () => {
+-  assert.match(s, /function safeJson\(res,status,data,headers=\{\}\)\{res\.writeHead\(status,\{[^}]*'referrer-policy':'no-referrer'/);
++  assert.match(s, /function safeJson\(res,status,data,headers=\{\}\)\{if\(status>=400&&res\.tcdsNavigation\)return errorPage\(res,status,res\.tcdsReason\|\|data\?\.error\);res\.writeHead\(status,\{[^}]*'referrer-policy':'no-referrer'/);
+   assert.match(s, /form-action 'self' \$\{new URL\(redirect\)\.origin\}; frame-ancestors 'none'/);
+ });
+diff -ruN -x node_modules -x *.jpg r7/tests/r8-readable-errors.test.mjs pkg/issuer-v1.2-r8/tests/r8-readable-errors.test.mjs
+--- r7/tests/r8-readable-errors.test.mjs	1970-01-01 01:00:00
++++ pkg/issuer-v1.2-r8/tests/r8-readable-errors.test.mjs	2026-11-19 23:00:29
+@@ -0,0 +1,26 @@
++// r8: a person in a browser gets a readable page on any error, never raw JSON; API callers keep JSON.
++// End-to-end proof (real server.mjs + oidc-provider): r6_full_flow/deny.mjs in the deploy package.
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import {readFileSync} from 'node:fs';
++const s = readFileSync(new URL('../src/server.mjs', import.meta.url), 'utf8');
++test('errors on browser navigations render the page; everything else keeps JSON', () => {
++  assert.match(s, /const isNavigation=req=>req\.headers\['sec-fetch-mode'\]==='navigate'\|\|\(!req\.headers\['sec-fetch-mode'\]&&\/text\\\/html\/\.test/);
++  assert.match(s, /res\.tcdsNavigation=isNavigation\(req\);/);
++  assert.match(s, /if\(status>=400&&res\.tcdsNavigation\)return errorPage\(res,status,res\.tcdsReason\|\|data\?\.error\)/);
++});
++test("the provider's own errors use the same page (renderError)", () => {
++  assert.match(s, /async renderError\(ctx,out\)\{const p=errorPageParts\(out\?\.error\);/);
++});
++test('the page shows fixed text only, a random reference, the strict page CSP, and links back to the EOC', () => {
++  const fn = s.slice(s.indexOf('export function errorPageParts('), s.indexOf('function errorPage('));
++  assert.match(fn, /randomBytes\(4\)\.toString\('hex'\)/);
++  assert.match(fn, /'content-security-policy':PAGE_CSP/);
++  assert.match(fn, /new URL\(redirect\)\.origin\+'\/'/);
++  assert.doesNotMatch(fn, /req\.|details\.|uid/);   // nothing from the request is echoed
++});
++test('a refused passkey reads as "no access", stale links read as "expired"', () => {
++  assert.match(s, /IAM_VERIFIER_DENIED:'ACCESS'/);
++  assert.match(s, /invalid_request:'EXPIRED'/);
++  assert.match(s, /SessionNotFound:'EXPIRED'/);
++});

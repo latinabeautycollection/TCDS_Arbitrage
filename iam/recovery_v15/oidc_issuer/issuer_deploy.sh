@@ -17,7 +17,19 @@
 #   rollback         CONFIRM=ROLLBACK-ISSUER: back to r2 and the backed-up env, restart
 #   upgrade-r4       CONFIRM=UPGRADE-ISSUER-R4: r3 -> r4 (GET-only open paths; invalid OIDC_LOGIN_ENABLED refuses start),
 #                    env unchanged; returns to r3 automatically if the issuer does not come back
-#   rollback-r4      CONFIRM=ROLLBACK-ISSUER-R4: back to r3, restart
+#   rollback-r4      CONFIRM=ROLLBACK-ISSUER-R4: back to r3, restart   (historical; r4 is now the r5 rollback target)
+#   upgrade-r5       CONFIRM=UPGRADE-ISSUER-R5: r4 -> r5 (interaction-stage freshness check accepts oidc-provider's normalised
+#                    max_age=0 -> prompt=login; /auth stays strict). Env unchanged (login gate kept as it is);
+#                    returns to r4 automatically if the issuer does not come back
+#   rollback-r5      CONFIRM=ROLLBACK-ISSUER-R5: back to r4, restart
+#   upgrade-r6       CONFIRM=UPGRADE-ISSUER-R6: r5 -> r6 (passkey completion fixed: login-gate shadowing, consent grant,
+#                    amr in the ID token; styled sign-in page). Env unchanged; returns to r5 automatically on failure
+#   rollback-r6      CONFIRM=ROLLBACK-ISSUER-R6: back to r5, restart
+#   upgrade-r7       CONFIRM=UPGRADE-ISSUER-R7: r6 -> r7 (sign-in page: Referrer-Policy same-origin so the browser sends its
+#                    real Origin on the form POST; form-action 'self' + the client's origin for the redirect back)
+#   rollback-r7      CONFIRM=ROLLBACK-ISSUER-R7: back to r6, restart
+#   upgrade-r8       CONFIRM=UPGRADE-ISSUER-R8: r7 -> r8 (readable error pages for people in a browser; JSON kept for API callers)
+#   rollback-r8      CONFIRM=ROLLBACK-ISSUER-R8: back to r7, restart
 # Usage: bash /tmp/recov15/oidc_issuer/issuer_deploy.sh <cmd>
 set -euo pipefail
 D=/tmp/recov15/oidc_issuer
@@ -25,9 +37,9 @@ BASE=/srv/arb-system/oidc_issuer
 SEC=/etc/tcds-issuer
 NODEV=v22.23.4
 NODE_SHA_X64=1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce
-BUNDLE=issuer-v1.2-r4
-BUNDLE_SHA=8db36a764f097074bfd6b234f2417f1ab7bf71159d516f5e35efe837da384e2c
-PREV_BUNDLE=issuer-v1.2-r3   # rollback-r4 target
+BUNDLE=issuer-v1.2-r8
+BUNDLE_SHA=1c64cbf34191b8baa616cf952d3938a0dfbc3283d9f25f770c60f7832089f347
+PREV_BUNDLE=issuer-v1.2-r7   # rollback-r8 target
 R2_BUNDLE=issuer-v1.2-r2     # the original r2 rollback (env backup issuer.env.r2-backup)
 RT=$BASE/runtime/node-$NODEV-linux-x64
 APP=$BASE/app/$BUNDLE
@@ -237,6 +249,99 @@ upgrade-r4)
     ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
   fi
   echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+upgrade-r5)
+  # r4 -> r5: only src/policy.mjs (assertFreshInteraction), src/server.mjs (its two interaction call sites) and one test.
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER-R5" ] || { echo "set CONFIRM=UPGRADE-ISSUER-R5"; exit 1; }
+  [ "$(readlink -f "$BASE/current")" = "$BASE/app/$PREV_BUNDLE" ] || { echo "current is not $PREV_BUNDLE - stopping"; exit 1; }
+  [ "$(grep -c '^OIDC_LOGIN_ENABLED=\(true\|false\)$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env needs exactly one OIDC_LOGIN_ENABLED=true|false line - stopping"; exit 1; }
+  bash "$0" install-app
+  : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && break; sleep 1; done; sleep 2
+  if ! ss -ltn | grep -q '127.0.0.1:8401 '; then
+    echo "!! issuer not listening after r5 - returning to $PREV_BUNDLE"; tail -5 "$BASE/issuer.err.log" 2>/dev/null
+    ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+    ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
+  fi
+  grep -q 'assertFreshInteraction(details.params)' "$BASE/current/src/server.mjs" && echo "r5 interaction check in place" || echo "!! r5 check missing"
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback-r5)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R5" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R5"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] || { echo "$PREV_BUNDLE missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
+  ;;
+upgrade-r6)
+  # r5 -> r6: src/server.mjs (completion: no login-gate shadowing, Grant for this client + openid, amr in the openid claims;
+  # styled page, CSP img-src/form-action self), src/passkey-interaction.{js,css}, logo, tests.
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER-R6" ] || { echo "set CONFIRM=UPGRADE-ISSUER-R6"; exit 1; }
+  [ "$(readlink -f "$BASE/current")" = "$BASE/app/$PREV_BUNDLE" ] || { echo "current is not $PREV_BUNDLE - stopping"; exit 1; }
+  [ "$(grep -c '^OIDC_LOGIN_ENABLED=\(true\|false\)$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env needs exactly one OIDC_LOGIN_ENABLED=true|false line - stopping"; exit 1; }
+  bash "$0" install-app
+  : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && break; sleep 1; done; sleep 2
+  if ! ss -ltn | grep -q '127.0.0.1:8401 '; then
+    echo "!! issuer not listening after r6 - returning to $PREV_BUNDLE"; tail -5 "$BASE/issuer.err.log" 2>/dev/null
+    ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+    ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
+  fi
+  grep -q 'consent:{grantId}' "$BASE/current/src/server.mjs" && grep -q "openid:\['sub','amr'\]" "$BASE/current/src/server.mjs" && echo "r6 completion fixes in place" || echo "!! r6 fixes missing"
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback-r6)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R6" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R6"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] || { echo "$PREV_BUNDLE missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
+  ;;
+upgrade-r7)
+  # r6 -> r7: src/server.mjs html() only (Referrer-Policy same-origin; form-action 'self' + client origin) + tests.
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER-R7" ] || { echo "set CONFIRM=UPGRADE-ISSUER-R7"; exit 1; }
+  [ "$(readlink -f "$BASE/current")" = "$BASE/app/$PREV_BUNDLE" ] || { echo "current is not $PREV_BUNDLE - stopping"; exit 1; }
+  [ "$(grep -c '^OIDC_LOGIN_ENABLED=\(true\|false\)$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env needs exactly one OIDC_LOGIN_ENABLED=true|false line - stopping"; exit 1; }
+  bash "$0" install-app
+  : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && break; sleep 1; done; sleep 2
+  if ! ss -ltn | grep -q '127.0.0.1:8401 '; then
+    echo "!! issuer not listening after r7 - returning to $PREV_BUNDLE"; tail -5 "$BASE/issuer.err.log" 2>/dev/null
+    ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+    ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
+  fi
+  grep -q "'referrer-policy':'same-origin'" "$BASE/current/src/server.mjs" && grep -q 'consent:{grantId}' "$BASE/current/src/server.mjs" && echo "r7 sign-in page fixes in place" || echo "!! r7 fixes missing"
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback-r7)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R7" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R7"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] || { echo "$PREV_BUNDLE missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
+  ;;
+upgrade-r8)
+  # r7 -> r8: src/server.mjs (readable error page for browser navigations + provider renderError), css, tests.
+  [ "${CONFIRM:-}" = "UPGRADE-ISSUER-R8" ] || { echo "set CONFIRM=UPGRADE-ISSUER-R8"; exit 1; }
+  [ "$(readlink -f "$BASE/current")" = "$BASE/app/$PREV_BUNDLE" ] || { echo "current is not $PREV_BUNDLE - stopping"; exit 1; }
+  [ "$(grep -c '^OIDC_LOGIN_ENABLED=\(true\|false\)$' "$SEC/issuer.env")" = 1 ] || { echo "issuer.env needs exactly one OIDC_LOGIN_ENABLED=true|false line - stopping"; exit 1; }
+  bash "$0" install-app
+  : > "$BASE/issuer.err.log" 2>/dev/null || true
+  clean_pm2 restart "$NAME" >/dev/null
+  for i in $(seq 1 20); do ss -ltn | grep -q '127.0.0.1:8401 ' && break; sleep 1; done; sleep 2
+  if ! ss -ltn | grep -q '127.0.0.1:8401 '; then
+    echo "!! issuer not listening after r8 - returning to $PREV_BUNDLE"; tail -5 "$BASE/issuer.err.log" 2>/dev/null
+    ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+    ss -ltn | grep -q '127.0.0.1:8401 ' && echo "back on $PREV_BUNDLE" || echo "!! issuer still not listening"; exit 1
+  fi
+  grep -q 'res.tcdsNavigation=isNavigation(req)' "$BASE/current/src/server.mjs" && grep -q "'referrer-policy':'same-origin'" "$BASE/current/src/server.mjs" && echo "r8 readable error pages in place" || echo "!! r8 changes missing"
+  echo "UPGRADED to $BUNDLE: $(grep -h 'login gate' "$BASE/issuer.out.log" | tail -1)"
+  ;;
+rollback-r8)
+  [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R8" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R8"; exit 1; }
+  [ -d "$BASE/app/$PREV_BUNDLE" ] || { echo "$PREV_BUNDLE missing - stopping"; exit 1; }
+  ln -sfn "$BASE/app/$PREV_BUNDLE" "$BASE/current"; clean_pm2 restart "$NAME" >/dev/null; sleep 4
+  ss -ltn | grep -q '127.0.0.1:8401 ' && echo "ROLLED BACK to $PREV_BUNDLE" || echo "!! issuer not listening after rollback"
   ;;
 rollback-r4)
   [ "${CONFIRM:-}" = "ROLLBACK-ISSUER-R4" ] || { echo "set CONFIRM=ROLLBACK-ISSUER-R4"; exit 1; }
