@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertTriangle, Box, Camera, PackageCheck, RefreshCw, Scale, ScanLine, Truck } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Box, Camera, PackageCheck, RefreshCw, Scale, Truck } from 'lucide-react';
 import { AppHeader } from '../../components/AppHeader';
 import { PrimaryButton } from '../../components/PrimaryButton';
 import { ScreenCard } from '../../components/ScreenCard';
@@ -53,6 +53,8 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
   const [scannerReconciling, setScannerReconciling] = useState(false);
   const [pendingRetry, setPendingRetry] = useState<PendingPackShipRetry | null>(null);
   const currentTaskId = useRef(taskId);
+  const packageInputRef = useRef<HTMLInputElement>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
   currentTaskId.current = taskId;
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
 
   const showApiError = useCallback((error: unknown) => {
     const apiError = error instanceof PackShipApiError ? error : new PackShipApiError('UNKNOWN_ERROR');
-    const resolved = resolvePackShipMessage(apiError.code, apiError.supportReference, apiError.messageOverride);
+    const resolved = resolvePackShipMessage(apiError.code, apiError.supportReference, apiError.messageOverride, apiError.requestId);
     setMessage(resolved);
     if (resolved.presentation === 'SHEET') setDetailMessage(resolved);
   }, []);
@@ -99,6 +101,11 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
   }, [taskId]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (!toast) return; const id = window.setTimeout(() => setToast(null), 4000); return () => window.clearTimeout(id); }, [toast]);
+  // An action's result banner sits at the top of the page. Bring it into view, so a refusal of a
+  // button far down the page is seen rather than looking as if nothing happened.
+  useEffect(() => {
+    if (message?.presentation === 'BANNER') bannerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [message]);
 
   const mutate = async (
     operation: () => Promise<PackShipTask>,
@@ -156,12 +163,36 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
   if (loading) return <><AppHeader title="Pack & Ship" subtitle="Loading packing custody…"/><div className="mx-auto max-w-md p-4"><div className="skeleton h-80 rounded-[2rem]"/></div></>;
   if (!task) return <><AppHeader title="Pack & Ship" subtitle="Packing custody unavailable"/><div className="mx-auto max-w-md p-4"><ScreenCard><AlertTriangle className="text-tcds-red"/><h2 className="mt-3 font-display text-xl font-black">Packing task required</h2><p className="mt-2 text-sm text-tcds-muted">Return to the packing queue and open an assigned task.</p><PrimaryButton onClick={() => navigate('/dashboard')}>Return to Dashboard</PrimaryButton></ScreenCard></div></>;
 
+  // Manual and HID scan entry. Each field sits in a form, so the phone's Go key and a scanner that
+  // sends Enter submit it. Enter does not check a button's disabled state, so each handler repeats
+  // its button's conditions.
+  // Once the source and every item are verified, the box choice below replaces the placeholder.
+  const contentsVerified = task.sourceVerified && task.items.every((item) => item.verified);
+  const submitScan = () => {
+    if (!scanValue || interactionLocked || !online) return;
+    const barcode = scanValue; const taskIdSnapshot = task.taskId; const rowVersion = task.rowVersion; const sourceVerified = task.sourceVerified;
+    const bound = bindPackShipManualOperation((operation) => sourceVerified ? packShipApi.scanItem(taskIdSnapshot, barcode, rowVersion, operation) : packShipApi.scanSource(taskIdSnapshot, barcode, rowVersion, operation));
+    void mutate(bound.run, sourceVerified ? 'Item verified' : 'Packing custody confirmed', undefined, true);
+  };
+  const submitLabelPair = () => {
+    if (!shipmentId || !trackingScan || !packageScan || interactionLocked || !online) return;
+    const shipment = shipmentId; const tracking = trackingScan; const packageBarcode = packageScan;
+    const bound = bindPackShipManualOperation((operation) => packShipApi.verifyLabel(shipment, tracking, packageBarcode, operation));
+    void mutate(bound.run, 'Package and tracking verified', undefined, true);
+  };
+  const submitOutbound = () => {
+    if (interactionLocked || !online || !outboundConnectivityReady || !canStage || !shipmentId || !outboundScan) return;
+    const shipment = shipmentId; const location = outboundScan;
+    const bound = bindPackShipManualOperation((operation) => packShipApi.stageOutbound(shipment, location, operation));
+    void mutate(bound.run, 'Package staged for carrier handoff', undefined, true);
+  };
+
   return <><AppHeader title="Pack & Ship" subtitle="Packing custody → shipping authorization" />
     {toast && <PackShipToast title={toast.title} detail={toast.detail} onDismiss={() => setToast(null)}/>} 
     <div aria-live="assertive" className="sr-only">{message?.announce}</div>
     <div className="mx-auto max-w-md space-y-4 p-4 pb-28">
       {!online && <WorkflowMessageBanner message={resolvePackShipMessage('NETWORK_ERROR', undefined, { title:'Offline — carrier and shipment actions are blocked', explanation:'Downloaded instructions remain visible, but task state and carrier information may be stale.', nextAction:'Reconnect before confirming contents, sealing, purchasing a label, printing, or staging the package.' })} onPrimary={() => void load()} onDetails={() => setDetailMessage(resolvePackShipMessage('NETWORK_ERROR'))}/>} 
-      {banner && <WorkflowMessageBanner message={banner} onPrimary={handlePrimary} onSecondary={() => setDetailMessage(banner)} onDetails={() => setDetailMessage(banner)}/>} 
+      {banner && <div ref={bannerRef}><WorkflowMessageBanner message={banner} onPrimary={handlePrimary} onSecondary={() => setDetailMessage(banner)} onDetails={() => setDetailMessage(banner)}/></div>} 
 
       <ScreenCard>
         <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-[.2em] text-tcds-gold">Packing Task</p><h2 className="font-display text-xl font-black text-tcds-ink">{task.taskNumber}</h2><p className="text-sm text-tcds-muted">Order {task.orderNumber} · {task.stationCode}</p></div><button disabled={scannerReconciling} onClick={() => void load()} className="tcds-focus rounded-xl border border-tcds-line p-2 disabled:opacity-50" aria-label="Refresh packing task"><RefreshCw size={18}/></button></div>
@@ -197,13 +228,13 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
         <GuidanceCard what={task.sourceVerified ? 'Scan each exact TCDS item barcode.' : 'Scan the tote or packing-stage barcode.'} why="This proves the correct picked custody and exact serialized contents are at this station." next={task.sourceVerified ? 'Confirm every expected item.' : 'Scan the first expected item.'}/>
         <div className="mt-3 rounded-2xl bg-tcds-black p-4 text-white"><p className="text-xs font-black uppercase tracking-[.16em] text-tcds-gold">Expected contents</p><p className="mt-1 text-3xl font-black">{task.items.filter((i) => i.verified).length} / {task.items.length}</p><p className="mt-2 text-sm text-white/60">Exact TCDS unit identities only. Matching SKU/model substitution is blocked; serial/IMEI/MAC verification remains a separate authoritative check where required.</p></div>
         <div className="mt-3 space-y-2">{task.items.map((item) => <div key={item.itemId} className="rounded-2xl border border-tcds-line p-3"><div className="flex justify-between gap-3"><div><p className="font-black">{item.title}</p><p className="text-xs text-tcds-muted">{item.internalBarcode}{item.serialEnding ? ` · …${item.serialEnding}` : ''}</p></div><span className={`text-xs font-black ${item.verified ? 'text-tcds-green' : 'text-tcds-warning'}`}>{item.verified ? 'VERIFIED' : 'PENDING'}</span></div></div>)}</div>
-        <div className="mt-3 flex gap-2"><input aria-label="Scan tote or item barcode" maxLength={256} autoComplete="off" spellCheck={false} value={scanValue} onChange={(e) => setScanValue(e.target.value)} className="min-h-14 flex-1 rounded-2xl border border-tcds-line px-4 text-base" placeholder={task.sourceVerified ? 'Scan exact TCDS item' : 'Scan tote or pack stage'}/><button aria-label="Submit scan" disabled={!scanValue || interactionLocked || !online} onClick={() => { const barcode = scanValue; const taskIdSnapshot = task.taskId; const rowVersion = task.rowVersion; const sourceVerified = task.sourceVerified; const bound = bindPackShipManualOperation((operation) => sourceVerified ? packShipApi.scanItem(taskIdSnapshot, barcode, rowVersion, operation) : packShipApi.scanSource(taskIdSnapshot, barcode, rowVersion, operation)); void mutate(bound.run, sourceVerified ? 'Item verified' : 'Packing custody confirmed', undefined, true); }} className="rounded-2xl bg-tcds-black px-4 text-white"><ScanLine/></button></div><InlineFieldGuidance message={inline('scan')}/>
+        <form className="mt-3 flex gap-2" onSubmit={(e) => { e.preventDefault(); submitScan(); }}><input aria-label="Scan tote or item barcode" enterKeyHint="go" maxLength={256} autoComplete="off" spellCheck={false} value={scanValue} onChange={(e) => setScanValue(e.target.value)} className="min-h-14 flex-1 rounded-2xl border border-tcds-line px-4 text-base" placeholder={task.sourceVerified ? 'Scan exact TCDS item' : 'Scan tote or pack stage'}/><button type="submit" aria-label="Submit scan" disabled={!scanValue || interactionLocked || !online} className="rounded-2xl bg-tcds-black px-4 text-white"><ArrowRight size={18}/><span className="ml-1 text-sm font-black">Submit</span></button></form><InlineFieldGuidance message={inline('scan')}/>
       </ScreenCard></section>
 
       <section id="stage-packaging"><ScreenCard>
         <h3 className="font-display text-lg font-black">Packaging Recommendation</h3>
         <GuidanceCard what="Use the approved package and protection profile." why="The profile balances damage prevention, dimensional weight, battery rules, and shipping cost." next="Create and measure the sealed TCDS package."/>
-        {task.packaging ? <div className="mt-3 rounded-2xl border border-tcds-gold/30 bg-tcds-gold/10 p-4"><div className="flex items-center gap-2"><Box className="text-tcds-goldDeep"/><p className="font-black">{task.packaging.packageCode}</p><span className="ml-auto text-xs font-black">{Math.round(task.packaging.confidence * 100)}%</span></div><p className="mt-2 text-sm font-semibold">{task.packaging.description}</p><ul className="mt-2 space-y-1 text-sm text-tcds-muted">{task.packaging.protection.map((x) => <li key={x}>✓ {x}</li>)}</ul></div> : <p className="mt-2 text-sm text-tcds-muted">Recommendation will load after contents are verified.</p>}
+        {task.packaging ? <div className="mt-3 rounded-2xl border border-tcds-gold/30 bg-tcds-gold/10 p-4"><div className="flex items-center gap-2"><Box className="text-tcds-goldDeep"/><p className="font-black">{task.packaging.packageCode}</p><span className="ml-auto text-xs font-black">{Math.round(task.packaging.confidence * 100)}%</span></div><p className="mt-2 text-sm font-semibold">{task.packaging.description}</p><ul className="mt-2 space-y-1 text-sm text-tcds-muted">{task.packaging.protection.map((x) => <li key={x}>✓ {x}</li>)}</ul></div> : !contentsVerified && <p className="mt-2 text-sm text-tcds-muted">Recommendation will load after contents are verified.</p>}
         <PackagingSelector task={task} disabled={interactionLocked || !online} onSubmit={submitControl}/>
       </ScreenCard></section>
 
@@ -237,11 +268,11 @@ export function PackShipScreen({ capturePolicyAuthority }: PackShipScreenProps =
         <div className="mt-3 rounded-2xl bg-tcds-black p-4 text-white"><div className="flex items-center gap-2"><Truck className="text-tcds-gold"/><p className="font-black">{task.carrierLabel.status}</p></div><p className="mt-2 text-sm text-white/60">{task.carrierLabel.trackingNumber || 'Tracking is created only after an idempotent label purchase.'}</p></div>
         {selectedRate && <p className="mt-3 text-sm font-semibold">Selected: {selectedRate.carrier} {selectedRate.service} · {selectedRate.currency} {selectedRate.totalCost.toFixed(2)}</p>}
         <button disabled={!shipmentId || task.carrierLabel.status !== 'LABEL_PURCHASED' || interactionLocked || !online} onClick={() => { const shipment = shipmentId; const bound = bindPackShipManualOperation((operation) => packShipApi.printLabel(shipment, operation)); void mutate(bound.run, 'Label print queued', 'Use the existing purchased label; do not repurchase it.', true); }} className="mt-3 min-h-14 w-full rounded-2xl border border-tcds-line bg-white font-black">Print through Device Gateway</button>
-        <div className="mt-3 space-y-2"><input aria-label="Carrier tracking barcode" maxLength={256} autoComplete="off" spellCheck={false} value={trackingScan} onChange={(e) => setTrackingScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan carrier tracking barcode"/><InlineFieldGuidance message={inline('tracking')}/><input aria-label="TCDS package barcode" maxLength={256} autoComplete="off" spellCheck={false} value={packageScan} onChange={(e) => setPackageScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan TCDS package barcode"/><InlineFieldGuidance message={inline('package')}/><button disabled={!shipmentId || !trackingScan || !packageScan || interactionLocked || !online} onClick={() => { const shipment = shipmentId; const tracking = trackingScan; const packageBarcode = packageScan; const bound = bindPackShipManualOperation((operation) => packShipApi.verifyLabel(shipment, tracking, packageBarcode, operation)); void mutate(bound.run, 'Package and tracking verified', undefined, true); }} className="min-h-14 w-full rounded-2xl bg-tcds-black font-black text-white">Verify Package ↔ Tracking Link</button></div>
+        <form className="mt-3 space-y-2" onSubmit={(e) => { e.preventDefault(); submitLabelPair(); }}><input aria-label="Carrier tracking barcode" enterKeyHint="next" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); packageInputRef.current?.focus(); } }} maxLength={256} autoComplete="off" spellCheck={false} value={trackingScan} onChange={(e) => setTrackingScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan carrier tracking barcode"/><InlineFieldGuidance message={inline('tracking')}/><input ref={packageInputRef} aria-label="TCDS package barcode" enterKeyHint="go" maxLength={256} autoComplete="off" spellCheck={false} value={packageScan} onChange={(e) => setPackageScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan TCDS package barcode"/><InlineFieldGuidance message={inline('package')}/><button type="submit" disabled={!shipmentId || !trackingScan || !packageScan || interactionLocked || !online} className="min-h-14 w-full rounded-2xl bg-tcds-black font-black text-white">Verify Package ↔ Tracking Link</button></form>
       </ScreenCard></section>
 
       <section id="stage-outbound"><ScreenCard><h3 className="font-display text-lg font-black">Authoritative Completion Gate</h3><p className="mt-1 text-sm text-tcds-muted">Tap a failed gate to jump to the stage that needs attention.</p><div className="mt-3"><CompletionGateCard gates={task.completionGates} onGateSelect={(gate) => { const map: Record<string,string> = { CONTENTS:'stage-contents', PACKAGING:'stage-packaging', MEASUREMENTS:'stage-measurements', EVIDENCE:'stage-evidence', ADDRESS:'stage-address', RATES:'stage-rates', LABEL:'stage-label', OUTBOUND:'stage-outbound' }; document.getElementById(map[gate.stage || ''] || 'stage-outbound')?.scrollIntoView({ behavior:'smooth', block:'start' }); }}/></div></ScreenCard>
-        <div className="space-y-2"><input aria-label="Outbound staging location" maxLength={256} autoComplete="off" spellCheck={false} value={outboundScan} onChange={(e) => setOutboundScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan outbound staging location"/><InlineFieldGuidance message={inline('outbound')}/><PrimaryButton disabled={interactionLocked || !online || !outboundConnectivityReady || !canStage || !shipmentId || !outboundScan} onClick={() => { const shipment = shipmentId; const location = outboundScan; const bound = bindPackShipManualOperation((operation) => packShipApi.stageOutbound(shipment, location, operation)); void mutate(bound.run, 'Package staged for carrier handoff', undefined, true); }}>Stage Package for Carrier Handoff</PrimaryButton><p className="text-center text-xs font-semibold text-tcds-muted">The item becomes SHIPPED only after carrier acceptance—not when the label is printed.</p></div>
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); submitOutbound(); }}><input aria-label="Outbound staging location" enterKeyHint="go" maxLength={256} autoComplete="off" spellCheck={false} value={outboundScan} onChange={(e) => setOutboundScan(e.target.value)} className="min-h-14 w-full rounded-2xl border border-tcds-line px-4 text-base" placeholder="Scan outbound staging location"/><InlineFieldGuidance message={inline('outbound')}/><PrimaryButton type="submit" disabled={interactionLocked || !online || !outboundConnectivityReady || !canStage || !shipmentId || !outboundScan}>Stage Package for Carrier Handoff</PrimaryButton><p className="text-center text-xs font-semibold text-tcds-muted">The item becomes SHIPPED only after carrier acceptance—not when the label is printed.</p></form>
       </section>
     </div>
     <MessageDetailSheet message={detailMessage} onClose={() => setDetailMessage(null)} onPrimary={() => { setDetailMessage(null); handlePrimary(); }} onSecondary={() => setDetailMessage(null)}/>
