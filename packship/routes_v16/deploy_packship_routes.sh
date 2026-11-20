@@ -21,7 +21,7 @@ CAND=$LV/candidate
 VHOST=/etc/nginx/sites-enabled/warehouse-app.tcdsolutionsgroup.com
 PUBLIC=https://warehouse-app.tcdsolutionsgroup.com
 ORIG_HOST_SHA16=1264a0a0a203919c          # the deployed host before this change (inspect_loginv2.sh, 2026-11-17)
-SUMS_SHA=f143229ac80e8b1586e5fbd9d0a11d8fe06fda744d7dce89833ab56a2cdf7417
+SUMS_SHA=ce236d3c76e5a31cac2929b250eb381cbd8330e7848014182ef3d061c67e780e
 UUID=00000000-0000-4000-8000-000000000000
 umask 077
 

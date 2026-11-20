@@ -116,7 +116,9 @@ export class PackShipV02Repository {
         $1::uuid,$2::uuid,$3,$4,$5::jsonb,$6::jsonb,$7,$8::uuid,$9::uuid
       ) result`,
       [input.authSessionId,input.shipmentId,input.trackingBarcode,input.packageBarcode,
-       JSON.stringify(input.physicalEvidence ?? null),JSON.stringify(input.capture),
+       // No physical evidence (typed pair) must be SQL NULL. JSON.stringify(null) is the jsonb value null, which the
+       // database sees as present evidence and refuses (PACKSHIP_INPUT_INVALID physicalEvidence) -> 422.
+       input.physicalEvidence == null ? null : JSON.stringify(input.physicalEvidence),JSON.stringify(input.capture),
        input.op.idempotencyKey,input.op.requestId,input.op.correlationId],
     );
   }

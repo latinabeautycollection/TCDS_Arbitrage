@@ -33,7 +33,18 @@ describe("PackShipTaskResponseMapper (V0.2.1, no database access)", () => {
     expect(t.taskId).toBe(BASE.packingTaskId); expect(t.rowVersion).toBe(7);
     expect(t.orderNumber).toBe("EXT-123"); expect(t.facilityCode).toBe("LV2TEST"); expect(t.stationCode).toBe("PACK-01");
     expect(t.carrierCutoffAt).toBe("2026-12-01T16:00:00Z"); expect(t.items[0].title).toBe("Test Phone 128GB");
-    expect(t.readiness.postgres).toBe("UNKNOWN"); expect(gate(t, "CONTENTS")).toBe("PENDING");
+    expect(gate(t, "CONTENTS")).toBe("PENDING");
+  });
+  it("V1.6.2: api / postgres / network are READY (the PWA Stage button requires them); device readiness stays UNKNOWN", async () => {
+    const t: any = await new PackShipTaskResponseMapper().map(snap());
+    expect(t.readiness).toEqual({ api: "READY", postgres: "READY", network: "READY",
+      scanner: "UNKNOWN", scale: "UNKNOWN", printer: "UNKNOWN", gateway: "UNKNOWN" });
+  });
+  it("V1.6.2: a LABEL_VERIFIED task with the claim held meets the PWA's full canStage + connectivity condition", async () => {
+    const t: any = await new PackShipTaskResponseMapper().map(LABEL_VERIFIED);
+    const canStage = t.carrierLabel.status === "SCAN_VERIFIED" && t.completionGates.every((g: any) => !g.blocking || g.state === "PASS");
+    const connectivity = t.readiness.api === "READY" && t.readiness.postgres === "READY" && t.readiness.network === "READY";
+    expect(canStage && connectivity && !!t.shipmentId).toBe(true);
   });
   it("shows an explicit placeholder, not an invented title, when the item has no product profile", () => {
     const t: any = mapSnapshot(snap({ items: [{ ...BASE.items[0], title: null }] }));

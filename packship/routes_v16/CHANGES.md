@@ -106,6 +106,24 @@ which the database does not condition on readiness; `stationReadiness` is in the
 - Not done here: mounting in `src/server.ts`, the identity adapter, a role-bound runtime test, the PWA build.
 
 ## Still placeholders (no authority exists yet)
-`employeeName`, `sourceBarcode`, `itemLabelStatus`, `address`, `protection`, `rates`, `readiness.*`,
+`employeeName`, `sourceBarcode`, `itemLabelStatus`, `address`, `protection`, `rates`, `readiness.scanner/scale/printer/gateway`,
 `localPendingCount`. Address, rates, risk, label purchase and print are ours (Anthony, 2026-11-17), to be wired to
 the Domain 3/5 shipping services.
+
+19. **Typed label pairs (V1.6.1, 2026-11-20, found on the LV2TEST run).** `verifyLabel` sent
+    `JSON.stringify(physicalEvidence ?? null)`, i.e. the jsonb value `null`, when the PWA sends no evidence (typed
+    scans, camera off). `packship_verify_label_pair_v2` tests `p_physical_evidence IS NOT NULL`, which is true for
+    jsonb `null`, so every typed pair was refused: 422 `PACKSHIP_INPUT_INVALID` (`physicalEvidence`,
+    `EVIDENCE_INCONSISTENT`), shown in the PWA as "A value was not accepted". Now absent or null evidence is SQL NULL;
+    camera evidence is unchanged. Only `dist/.../PackShipV02Repository.js` changes in the deployed files. New
+    `tests/PackShipV02Repository.test.ts` (4 tests; 3 fail on V1.6). No database change.
+- V1.6.1 (2026-11-20): Jest 102/102; `tsc 5.8.3 --strict` clean; every other compiled file byte-identical to V1.6.
+
+20. **Stage button readiness (V1.6.2, 2026-11-20, LV2TEST run).** After the label pair verified, every gate was PASS
+    but the PWA's Stage button stayed disabled: PR #13 also requires `readiness.api`, `.postgres` and `.network` to be
+    `READY`, and the mapper sent the placeholder `UNKNOWN` for all readiness. These three are now `READY`: the
+    response only exists because the API answered with a snapshot the database just returned, over the network
+    delivering it. Scanner / scale / printer / gateway stay `UNKNOWN` (no reporting source). Only
+    `dist/.../PackShipTaskResponseMapper.js` changes. Tests: readiness values + the PWA's full stage condition on a
+    LABEL_VERIFIED task.
+- V1.6.2 (2026-11-20): Jest 104/104; `tsc --strict` clean.

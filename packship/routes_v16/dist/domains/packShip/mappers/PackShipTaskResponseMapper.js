@@ -106,8 +106,11 @@ function mapSnapshot(snapshot) {
             ...(s.shipment?.carrierCode ? { carrier: s.shipment.carrierCode } : {}),
             ...(s.package?.packageNumber ? { packageBarcode: s.package.packageNumber } : {}),
         },
-        readiness: { api: "UNKNOWN", postgres: "UNKNOWN", scanner: "UNKNOWN", scale: "UNKNOWN",
-            printer: "UNKNOWN", gateway: "UNKNOWN", network: "UNKNOWN" },
+        // api / postgres / network: this response exists only because the API answered with a snapshot the database just
+        // returned, over the network that is delivering it. The PWA's Stage button requires these three READY. The device
+        // readinesses (scanner, scale, printer, gateway) have no reporting source yet and stay UNKNOWN.
+        readiness: { api: "READY", postgres: "READY", scanner: "UNKNOWN", scale: "UNKNOWN",
+            printer: "UNKNOWN", gateway: "UNKNOWN", network: "READY" },
         completionGates: gates, localPendingCount: 0, lastUpdatedAt: new Date().toISOString(),
         operationalMessages: [],
     };
