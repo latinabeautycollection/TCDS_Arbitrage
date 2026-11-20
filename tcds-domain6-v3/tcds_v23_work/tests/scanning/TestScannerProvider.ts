@@ -17,7 +17,7 @@ export class TestScannerProvider implements WarehouseScannerProvider {
       provider: 'test',
       providerVersion: '1.0.0',
       runtimeAssetVersion: '1.0.0',
-      degradationReasons: [],
+      degradationReasons: [] as string[],
       lastChangedAt: new Date().toISOString(),
     } as const;
   }

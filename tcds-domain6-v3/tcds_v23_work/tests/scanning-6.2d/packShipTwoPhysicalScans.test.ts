@@ -100,7 +100,7 @@ describe("final Pack/Ship physical label proof", () => {
 
     expect(p.verifyLabel).toHaveBeenCalledTimes(1);
     expect(p.verifyLabel.mock.calls[0]?.slice(0, 3)).toEqual(["S1", "1Z999", "PKG-77"]);
-    expect(p.verifyLabel.mock.calls[0]?.[4]).toMatchObject({
+    expect((p.verifyLabel.mock.calls[0] as unknown[] | undefined)?.[4]).toMatchObject({
       labelPairId: r.labelPairId,
       tracking: { observationId: r.observationId },
     });
