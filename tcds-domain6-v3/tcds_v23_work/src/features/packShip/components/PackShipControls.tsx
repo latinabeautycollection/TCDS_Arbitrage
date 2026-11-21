@@ -3,6 +3,7 @@ import { Box, Lock, PackageCheck, ShieldCheck, UserCheck } from 'lucide-react';
 import { PrimaryButton } from '../../../components/PrimaryButton';
 import { PackShipApiError, packShipApi, type OperationContext } from '../services/packShipApi';
 import type { PackagingOptions, PackShipTask } from '../types/packShipTypes';
+import type { PackShipActionOutcome } from '../scanning/packShipRetry';
 import { canChooseBox, canMeasure, canSeal, checkMeasurements, claimView, holdsClaim, type MeasurementDraft } from '../controls/packShipControlState';
 
 /**
@@ -15,6 +16,7 @@ export type ControlSubmit = (
   submit: (operation: OperationContext) => Promise<PackShipTask>,
   successTitle: string,
   successDetail?: string,
+  onSettled?: (outcome: PackShipActionOutcome) => void,
 ) => void;
 
 type Props = { task: PackShipTask; disabled: boolean; onSubmit: ControlSubmit };
@@ -104,8 +106,12 @@ export function MeasurementForm({ task, disabled, onSubmit }: Props) {
     if (!checked.ok) { setInvalid(checked.field); return; }
     const { taskId, rowVersion } = task; const packageId = task.packageId as string; const packageRowVersion = task.packageRowVersion as number;
     const overrideDecisionId = approval.overrideDecisionId;
-    onSubmit((op) => packShipApi.saveMeasurements(taskId, rowVersion, packageId, packageRowVersion, checked.value, { type: 'MANUAL', overrideDecisionId }, op), 'Measurements saved');
+    // Saved values show in the Weight / Dimensions tiles above; the emptied form (Save inactive) is only for a correction.
+    onSubmit((op) => packShipApi.saveMeasurements(taskId, rowVersion, packageId, packageRowVersion, checked.value, { type: 'MANUAL', overrideDecisionId }, op), 'Measurements saved', undefined,
+      (outcome) => { if (outcome === 'ok') { setDraft(EMPTY); setInvalid(null); } });
   };
+  // Save stays inactive until a weight and all three dimensions are entered.
+  const complete = !!(draft.pounds.trim() || draft.ounces.trim()) && !!draft.lengthIn.trim() && !!draft.widthIn.trim() && !!draft.heightIn.trim();
   const field = (k: keyof MeasurementDraft, label: string, name: string) => <label className="block"><span className="text-[10px] font-black uppercase tracking-[.14em] text-tcds-muted">{label}</span>
     <input aria-label={label} aria-invalid={invalid === name} inputMode="decimal" autoComplete="off" value={draft[k]} onChange={set(k)} disabled={disabled}
       className={`mt-1 min-h-12 w-full rounded-xl border px-3 text-base ${invalid === name ? 'border-tcds-red' : 'border-tcds-line'}`}/></label>;
@@ -118,7 +124,7 @@ export function MeasurementForm({ task, disabled, onSubmit }: Props) {
     <div className="grid grid-cols-2 gap-2">{field('pounds', 'Weight (lb)', 'weight')}{field('ounces', 'Weight (oz)', 'weight')}</div>
     <div className="grid grid-cols-3 gap-2">{field('lengthIn', 'Length (in)', 'length')}{field('widthIn', 'Width (in)', 'width')}{field('heightIn', 'Height (in)', 'height')}</div>
     {invalid && <p role="alert" className="text-xs font-black text-tcds-red">{invalid === 'weight' ? 'Enter a weight above 0 (ounces under 16 when pounds are given).' : `Enter the ${invalid} in inches (above 0, up to 240).`}</p>}
-    <PrimaryButton disabled={disabled || !approval} onClick={save}>Save Measurements</PrimaryButton>
+    <PrimaryButton disabled={disabled || !approval || !complete} onClick={save}>Save Measurements</PrimaryButton>
   </div>;
 }
 
