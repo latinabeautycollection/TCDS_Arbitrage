@@ -12,7 +12,7 @@ export function AppLayout() {
     <div className="relative min-h-screen bg-tcds-surface text-tcds-ink">
       <div className="brand-watermark" aria-hidden="true" />
       {!isAuthenticationSurface && <DesktopSupervisorRail />}
-      <main className={`relative z-[1] ${isAuthenticationSurface ? '' : 'pb-36'}`}>
+      <main className={`relative ${isAuthenticationSurface ? '' : 'pb-36'}`}>
         <Outlet />
       </main>
       {!isAuthenticationSurface && <BottomNav />}
