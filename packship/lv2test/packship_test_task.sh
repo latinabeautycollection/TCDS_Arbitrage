@@ -167,6 +167,26 @@ ROLLBACK;
 SQL
   ;;
 
+events)
+  # Every scan event for the run in order, with any request/correlation id the row or its context carries, so the
+  # Request ID shown on the phone's "Why is this blocked?" sheet can be matched to the refused scan.
+  run_ok
+  PSQL <<'SQL'
+BEGIN READ ONLY;
+SELECT e.scan_event_id::text || '  ' || coalesce(e.context->>'scanKind', '?') || '=' || e.scan_result::text
+       || '  ' || coalesce((SELECT string_agg(k.key || '=' || (k.value #>> '{}'), ' ' ORDER BY k.key)
+            FROM jsonb_each(to_jsonb(e) - 'context' || coalesce(e.context, '{}'::jsonb)) k
+           WHERE k.key ILIKE '%request%' OR k.key ILIKE '%correlation%' OR k.key ILIKE '%reason%'
+              OR k.key ILIKE '%code%' AND k.key NOT ILIKE '%barcode%'), '-')
+  FROM warehouse_telemetry.barcode_scan_events e
+  JOIN warehouse.packing_tasks pt ON pt.packing_task_id::text = e.context->>'packingTaskId'
+  JOIN warehouse.fulfillment_orders o ON o.fulfillment_order_id = pt.fulfillment_order_id
+ WHERE o.marketplace = 'PSTEST' AND o.external_order_id = :'run'
+ ORDER BY e.scan_event_id;
+ROLLBACK;
+SQL
+  ;;
+
 retire)
   [ "${CONFIRM:-}" = "RETIRE-PSTEST" ] || { echo "set CONFIRM=RETIRE-PSTEST"; exit 1; }
   run_ok
@@ -183,5 +203,5 @@ COMMIT;
 SQL
   ;;
 
-*) echo "usage: [RUN=PSTEST-…] bash $0 rehearse|create|approve-weight|simulate-label|status|retire"; exit 2 ;;
+*) echo "usage: [RUN=PSTEST-…] bash $0 rehearse|create|approve-weight|simulate-label|status|events|retire"; exit 2 ;;
 esac
