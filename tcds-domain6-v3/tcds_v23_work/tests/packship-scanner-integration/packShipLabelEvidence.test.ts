@@ -84,7 +84,7 @@ describe("two-physical-scan deterministic evidence lineage", () => {
     );
 
     expect(p.verifyLabel).toHaveBeenCalledTimes(1);
-    const evidence = p.verifyLabel.mock.calls[0]?.[4];
+    const evidence = (p.verifyLabel.mock.calls[0] as unknown[] | undefined)?.[4];
     expect(evidence).toMatchObject({
       labelPairId: trackingEnvelope.clientOperationId,
       tracking: {

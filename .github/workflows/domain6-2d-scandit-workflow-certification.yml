@@ -93,5 +93,8 @@ jobs:
       # The Pack/Ship business controls (Claim, Select Box, Measurements, Seal).
       - run: npm run packship:controls:test
 
+      # Strict TypeScript over every test file, so type errors in tests cannot build up.
+      - run: npm run tests:typecheck
+
       - run: npm run check --if-present
       - run: npm run verify --if-present

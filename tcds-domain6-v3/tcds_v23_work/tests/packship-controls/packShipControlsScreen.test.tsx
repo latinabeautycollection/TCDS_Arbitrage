@@ -6,14 +6,14 @@ vi.mock("../../src/components/AppHeader", () => ({ AppHeader: () => null }));
 
 import { PackShipScreen } from "../../src/features/packShip/PackShipScreen";
 import { resolvePackShipMessage } from "../../src/features/packShip/messages/packShipMessageCatalog";
-import type { PackShipTask } from "../../src/features/packShip/types/packShipTypes";
+import type { CompletionGate, PackShipTask } from "../../src/features/packShip/types/packShipTypes";
 
 const TASK = "91093299-c815-4b39-8beb-e9103cb9f3ba";
 const PKG = "9b2f4c1e-5d6a-4b7c-8e9f-0a1b2c3d4e5f";
 const BOX = "a32f30df-ab2e-442d-9cd5-c9a485af802d";
 const APPROVAL = "4e5f6a7b-8c9d-4e0f-a1b2-c3d4e5f6a7b8";
 const HELD = { heldBySession: true, expired: false, expiresAt: "2026-11-18T10:00:00Z" };
-const gate = (code: string, state = "PENDING") => ({ code, label: code, state, blocking: true, stage: code });
+const gate = (code: string, state = "PENDING") => ({ code, label: code, state, blocking: true, stage: code }) as CompletionGate;
 
 function task(o: Partial<PackShipTask> = {}): PackShipTask {
   return {

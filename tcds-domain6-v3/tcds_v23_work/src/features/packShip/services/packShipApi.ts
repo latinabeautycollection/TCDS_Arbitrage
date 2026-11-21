@@ -52,20 +52,23 @@ export class PackShipApiError extends Error {
   supportReference?: string;
   retryAfterSeconds?: number;
   messageOverride?: Partial<PackShipMessage>;
-  constructor(code: string, supportReference?: string, retryAfterSeconds?: number, messageOverride?: Partial<PackShipMessage>) {
-    super(code); this.name = 'PackShipApiError'; this.code = code; this.supportReference = supportReference; this.retryAfterSeconds = retryAfterSeconds; this.messageOverride = messageOverride;
+  /** The X-Request-ID of the attempt that failed, so a refusal can be traced in the server logs. */
+  requestId?: string;
+  constructor(code: string, supportReference?: string, retryAfterSeconds?: number, messageOverride?: Partial<PackShipMessage>, requestId?: string) {
+    super(code); this.name = 'PackShipApiError'; this.code = code; this.supportReference = supportReference; this.retryAfterSeconds = retryAfterSeconds; this.messageOverride = messageOverride; this.requestId = requestId;
   }
 }
 
 async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?: string, correlationId?: string): Promise<T> {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 20000);
+  const requestId = uuid();
   try {
     const response = await fetch(`${API_BASE}${path}`, {
       ...init,
       credentials: 'include', cache: 'no-store', signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json', 'X-Request-ID': uuid(), 'X-Correlation-ID': correlationId ?? uuid(),
+        'Content-Type': 'application/json', 'X-Request-ID': requestId, 'X-Correlation-ID': correlationId ?? uuid(),
         'X-TCDS-App-Version': APP_VERSION, 'X-TCDS-Installation-ID': installationId(), ...csrfHeader(),
         ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}), ...(init.headers || {}),
       },
@@ -77,13 +80,13 @@ async function request<T>(path: string, init: RequestInit = {}, idempotencyKey?:
         title: body?.employeeTitle, explanation: body?.employeeExplanation, nextAction: body?.nextAction,
         primaryActionLabel: body?.primaryActionLabel, secondaryActionLabel: body?.secondaryActionLabel,
         blocking: body?.blocking, retryable: body?.retryable, severity: body?.severity, presentation: body?.presentation,
-      });
+      }, requestId);
     }
     return await response.json() as T;
   } catch (error) {
     if (error instanceof PackShipApiError) throw error;
-    if (error instanceof DOMException && error.name === 'AbortError') throw new PackShipApiError('REQUEST_TIMEOUT');
-    throw new PackShipApiError('NETWORK_ERROR');
+    if (error instanceof DOMException && error.name === 'AbortError') throw new PackShipApiError('REQUEST_TIMEOUT', undefined, undefined, undefined, requestId);
+    throw new PackShipApiError('NETWORK_ERROR', undefined, undefined, undefined, requestId);
   } finally { window.clearTimeout(timeout); }
 }
 
