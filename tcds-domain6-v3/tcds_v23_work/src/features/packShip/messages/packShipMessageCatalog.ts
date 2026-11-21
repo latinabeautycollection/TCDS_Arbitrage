@@ -64,7 +64,7 @@ const CATALOG: Record<string, CatalogEntry> = {
   UNKNOWN_ERROR: { severity:'ERROR', presentation:'SHEET', blocking:true, retryable:true, title:'The action could not be completed', explanation:'The warehouse system returned an unrecognized operational error.', nextAction:'Retry once. If it continues, contact a supervisor and provide the support reference.', primaryActionLabel:'Retry', secondaryActionLabel:'Contact Supervisor' },
 };
 
-export function resolvePackShipMessage(code: string, supportReference?: string, backendMessage?: Partial<PackShipMessage>): PackShipMessage {
+export function resolvePackShipMessage(code: string, supportReference?: string, backendMessage?: Partial<PackShipMessage>, requestId?: string): PackShipMessage {
   const base = CATALOG[code] || CATALOG.UNKNOWN_ERROR;
   // packShipApi always passes every override key, most of them undefined when the server sends only {code}.
   // Only values the server actually sent may replace the catalog text; an undefined key must not blank it.
@@ -75,6 +75,7 @@ export function resolvePackShipMessage(code: string, supportReference?: string, 
     ...base,
     ...backendMessage,
     supportReference,
+    requestId,
     announce: backendMessage?.announce || `${backendMessage?.title || base.title}. ${backendMessage?.nextAction || base.nextAction}`,
   };
 }

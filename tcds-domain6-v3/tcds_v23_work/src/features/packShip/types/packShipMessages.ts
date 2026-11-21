@@ -13,6 +13,8 @@ export type PackShipMessage = {
   primaryActionLabel?: string;
   secondaryActionLabel?: string;
   supportReference?: string;
+  /** The X-Request-ID of the failed attempt, shown for diagnosis. */
+  requestId?: string;
   field?: 'scan' | 'weight' | 'length' | 'width' | 'height' | 'address' | 'rate' | 'label' | 'tracking' | 'package' | 'outbound';
   stage?: 'CONTENTS' | 'PACKAGING' | 'MEASUREMENTS' | 'EVIDENCE' | 'ADDRESS' | 'RATES' | 'LABEL' | 'OUTBOUND';
   steps?: string[];
