@@ -45,6 +45,7 @@
     "packship:scanner:typecheck": "tsc --noEmit -p config/typescript/packship-scanner-integration.tsconfig.json",
     "packship:scanner:test": "vitest run --config config/vitest/packship-scanner-integration.vitest.config.ts",
     "packship:controls:test": "vitest run --config config/vitest/packship-controls.vitest.config.ts",
+    "recovery:test": "vitest run --config config/vitest/recovery.vitest.config.ts",
     "tests:typecheck": "tsc --noEmit -p config/typescript/tests.tsconfig.json",
     "packship:scanner:certify": "npm run scandit:workflow:certify && npm run packship:scanner:architecture && npm run packship:scanner:typecheck && npm run packship:scanner:test && npm run build"
   },
