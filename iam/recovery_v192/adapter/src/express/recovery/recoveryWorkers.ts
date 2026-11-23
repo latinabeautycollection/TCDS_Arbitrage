@@ -63,10 +63,12 @@ export class RecoveryWorkers{
     if(!d)return 'EMPTY';
     let outcome:DeliveryOutcome='UNKNOWN';
     try{
-      const {code,ref}=JSON.parse(unseal({ciphertext:d.encrypted_payload,iv:d.payload_iv,tag:d.payload_tag},this.keys.outbox).toString('utf8'));
+      const p=JSON.parse(unseal({ciphertext:d.encrypted_payload,iv:d.payload_iv,tag:d.payload_tag},this.keys.outbox).toString('utf8'));
       const to=unseal({ciphertext:d.destination_ciphertext,iv:d.destination_iv,tag:d.destination_tag},this.keys.contact).toString('utf8');
-      if(d.channel!=='EMAIL')outcome='FAILED';
-      else outcome=await this.transport.sendEmail({to,code,link:`${this.linkBase}?ref=${encodeURIComponent(ref)}`,requestHint:String(d.challenge_id).slice(0,8)});
+      if(d.channel!=='EMAIL'||typeof p?.code!=='string')outcome='FAILED';
+      // 645 enrollment codes carry kind CONTACT_CODE and no invitation; 644 reset codes carry the invitation reference.
+      else if(p.kind==='CONTACT_CODE')outcome=await this.transport.sendEmail({kind:'CONTACT_CODE',to,code:p.code,requestHint:String(d.challenge_id).slice(0,8)});
+      else outcome=await this.transport.sendEmail({kind:'RESET_CODE',to,code:p.code,link:`${this.linkBase}?ref=${encodeURIComponent(p.ref)}`,requestHint:String(d.challenge_id).slice(0,8)});
     }catch(e:any){outcome='UNKNOWN';log('error','delivery attempt failed',{deliveryId:d.delivery_id,error:String(e?.message??e).slice(0,80)});}
     await this.pool.query('SELECT warehouse_identity.recovery_delivery_settle_v192($1,$2)',[d.delivery_id,outcome]);
     log(outcome==='ACCEPTED'?'info':'warn','delivery settled',{deliveryId:d.delivery_id,outcome});

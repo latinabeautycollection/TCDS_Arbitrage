@@ -15,7 +15,7 @@ function create() {
   return { credentialId: b64u(crypto.randomBytes(16)), cosePublicKey: cose, privateKeyPem: privateKey.export({ format: 'pem', type: 'pkcs8' }) };
 }
 
-function assert(k, { rpId, origin, challenge, counter = 1, userVerified = true }) {
+function assert(k, { rpId, origin, challenge, counter = 1, userVerified = true, userHandle = null }) {
   const rpIdHash = crypto.createHash('sha256').update(rpId).digest();
   const cnt = Buffer.alloc(4); cnt.writeUInt32BE(counter);
   const authData = Buffer.concat([rpIdHash, Buffer.from([userVerified ? 0x05 : 0x01]), cnt]);
@@ -23,7 +23,7 @@ function assert(k, { rpId, origin, challenge, counter = 1, userVerified = true }
   const signed = Buffer.concat([authData, crypto.createHash('sha256').update(clientData).digest()]);
   const signature = crypto.sign('sha256', signed, crypto.createPrivateKey(k.privateKeyPem));   // DER, as authenticators return
   return { id: k.credentialId, rawId: k.credentialId, type: 'public-key',
-    response: { authenticatorData: b64u(authData), clientDataJSON: b64u(clientData), signature: b64u(signature), userHandle: null },
+    response: { authenticatorData: b64u(authData), clientDataJSON: b64u(clientData), signature: b64u(signature), userHandle },
     clientExtensionResults: {}, authenticatorAttachment: 'platform' };
 }
 module.exports = { create, assert };

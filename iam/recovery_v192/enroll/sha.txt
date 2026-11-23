@@ -1,0 +1,4 @@
+26e19ea364a5e005fa04472102a54b60606a37c619d2f3dc27492bcbb36bbfa9  ./loginv2_6.1B/central_recovery_approval.patch
+7b1461cfe996133fd54b0256f9c602f3ff6e06cecb0e66a6f270a1f68d9b7a01  ./stg_enroll_approval.sh
+0ead839ff661b17a5e02253247ce77a1eba484106fb495b9383b1a04b5a3b770  ./verifier_6.1C/centralRecoveryContacts.ts
+8febb74c4726b674b9387a6a91c509b2d4cae016f89d198ff5ed190a7fece957  ./verifier_6.1C/centralRoutes.patch

@@ -16,7 +16,10 @@ const schema=z.object({
   M365_TENANT_ID:z.string().optional(),
   M365_CLIENT_ID:z.string().optional(),
   M365_CLIENT_SECRET:z.string().optional(),
-  M365_SENDER:z.string().optional()
+  M365_SENDER:z.string().optional(),
+  // 645: who is told that a confirmed recovery email waits for approval, and where they approve it (login-stg page).
+  RECOVERY_APPROVER_EMAILS:z.string().optional(),
+  RECOVERY_APPROVAL_LINK_BASE:z.string().url().refine(u=>u.startsWith('https://')&&!u.includes('?')&&!u.includes('#'),'https, no query').optional()
 }).superRefine((c,ctx)=>{
   if(c.RECOVERY_DELIVERY_MODE==='graph'&&!(c.M365_TENANT_ID&&c.M365_CLIENT_ID&&c.M365_CLIENT_SECRET&&c.M365_SENDER))
     ctx.addIssue({code:'custom',message:'graph delivery needs M365_TENANT_ID, M365_CLIENT_ID, M365_CLIENT_SECRET, M365_SENDER'});

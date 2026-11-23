@@ -64,6 +64,14 @@ const ask = q => new Promise(res => { const rl = readline.createInterface({ inpu
     const pk = soft.create();
     fx.passkey = (await q1(`INSERT INTO warehouse_identity.passkeys(user_id,credential_id,public_key,public_key_algorithm,enrolled_device_id,security_state)
       VALUES($1,$2,$3,-7,$4,'ACTIVE') RETURNING passkey_id`, [apr.user_id, pk.credentialId, pk.cosePublicKey, fx.dev])).passkey_id;
+    if (process.env.USE_EXISTING_CONTACT === '1') {
+      // Use the recovery email the employee enrolled and an approver approved (645), instead of planting one.
+      const ex = await q1(`SELECT count(*)::int n FROM warehouse_identity.user_recovery_contacts WHERE user_id=$1 AND contact_type='EMAIL'
+        AND status='VERIFIED' AND revoked_at IS NULL AND recovery_eligible_at<=clock_timestamp()`, [emp.user_id]);
+      ok(ex.n === 1, 'employee has exactly one approved, eligible recovery email (enrolled through 645)', `count=${ex.n}`);
+      if (ex.n !== 1) throw new Error('no enrolled recovery email - run e2e-enroll first');
+      console.log('   fixtures: device, AAL2 session, software passkey (approver); recovery email = the one enrolled through 645');
+    } else {
     const c = (() => { const iv = crypto.randomBytes(12), ci = crypto.createCipheriv('aes-256-gcm', key('contact'), iv);
       const ct = Buffer.concat([ci.update(TO), ci.final()]); return { ct, iv, tag: ci.getAuthTag() }; })();
     fx.contact = (await q1(`INSERT INTO warehouse_identity.user_recovery_contacts(user_id,contact_type,ciphertext,iv,tag,value_fingerprint,status,
@@ -71,6 +79,7 @@ const ask = q => new Promise(res => { const rl = readline.createInterface({ inpu
       VALUES($1,'EMAIL',$2,$3,$4,$5,'VERIFIED','SUPERVISED',clock_timestamp(),clock_timestamp()-interval '1 minute',clock_timestamp()-interval '2 minutes') RETURNING contact_id`,
       [emp.user_id, c.ct, c.iv, c.tag, hmacL(key('contact-fingerprint'), 'contact', TO.toLowerCase())])).contact_id;
     console.log('   fixtures: device, AAL2 session, software passkey (approver), verified recovery email (employee)');
+    }
     const admin = { cookie: `__Host-tcds_session=${token}; __Host-tcds_csrf=${csrf}`, 'x-csrf-token': csrf };
     const before = await q1(`SELECT password_hash h FROM warehouse_identity.password_credentials WHERE user_id=$1`, [emp.user_id]);
     const epochBefore = (await q1(`SELECT epoch FROM warehouse_identity.iam_session_epoch_status_v15($1)`, [emp.user_id]))?.epoch;
@@ -115,11 +124,18 @@ const ask = q => new Promise(res => { const rl = readline.createInterface({ inpu
       for (let i = 0; i < 40 && !msg; i++) {
         await new Promise(res => setTimeout(res, 1000));
         const lines = fs.existsSync(CFG.RECOVERY_CAPTURE_FILE) ? fs.readFileSync(CFG.RECOVERY_CAPTURE_FILE, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
-        msg = lines.reverse().find(m => m.to === TO && Date.parse(m.at) >= t0 - 2000) || null;
+        msg = lines.reverse().find(m => m.to === TO && (m.kind === undefined || m.kind === 'RESET_CODE') && Date.parse(m.at) >= t0 - 2000) || null;
       }
     } else {
       console.log(`   an email was sent to ${TO}.`);
-      const link = await ask('   paste the link from the email: '), code = await ask('   type the 8-digit code: ');
+      // Several emails can sit in the same inbox (enrollment code, approver notice, reset code): only the reset link fits here.
+      let link = '';
+      for (let i = 0; i < 3; i++) {
+        link = await ask('   paste the link from the "TCDS Warehouse password recovery code" email (it contains /auth/recovery/new-password?ref=): ');
+        if (link.startsWith(CFG.RECOVERY_LINK_BASE + '?ref=')) break;
+        console.log('   that is not the reset link (an approval link has /approve/recovery/?e=); try again');
+      }
+      const code = await ask('   type the 8-digit code from the same email: ');
       msg = { link, code };
     }
     ok(!!msg && /^\d{8}$/.test(msg.code), 'code delivered by the worker', msg ? `after ${Math.round((Date.now() - t0) / 1000)}s` : 'none within 40s');

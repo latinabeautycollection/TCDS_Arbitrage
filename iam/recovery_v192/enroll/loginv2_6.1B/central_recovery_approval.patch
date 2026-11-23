@@ -1,0 +1,209 @@
+--- a/src/express/centralEnrollment.ts	2026-11-23 08:35:09
++++ b/src/express/centralEnrollment.ts	2026-11-23 08:36:06
+@@ -409,7 +409,152 @@
+  const b=$('copy');
+  try{await navigator.clipboard.writeText($('link').value)}catch{$('link').select();try{document.execCommand('copy')}catch{}}
+  b.textContent='Copied';setTimeout(()=>{b.textContent='Copy link'},2000);
++};
++$('link').onfocus=()=>$('link').select();
++load();
++})();`;
++
++// Recovery-email APPROVAL page (645): https://login-stg.../approve/recovery/?e=<enrollment id>. Separate from the binding /
++// grant page so those stay unchanged. The id is not a secret: approving needs a passkey whose owner holds the recovery-email
++// approver role and is not the employee. The approver sees a masked address only.
++const APPROVE_RECOVERY_PAGE=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071523">
++<meta name="robots" content="noindex,nofollow"><title>TCDS · Recovery email approval</title><link rel="icon" type="image/png" href="/enroll/assets/tcds-shield.png"><link rel="stylesheet" href="/enroll/assets/enroll.css"></head>
++<body><main class="auth-page"><div class="auth-ambient" aria-hidden="true"></div>
++<section class="auth-layout approve-layout" aria-label="TCDS recovery email approval">
++ <div class="auth-showcase">
++  <img class="auth-logo" src="/enroll/assets/tcds-logo-wide.jpg" width="830" height="380" alt="TCDS Total Coverage Database Solutions gold shield and wordmark">
++  <span class="auth-overline">WAREHOUSE IDENTITY</span>
++  <h1>Approve a<br><em>recovery email.</em></h1>
++  <p>This employee added an email address for resetting a forgotten password and confirmed a code sent to it. Approve only if the address really belongs to them.</p>
++  <div class="auth-claims">
++   <span>${ICON.shield} The employee confirmed the code first</span>
++   <span>${ICON.print} Signed with your own passkey</span>
++   <span>${ICON.key} Used only for password recovery</span>
++  </div>
++ </div>
++ <div class="auth-card approve-card">
++  <div class="approve-head"><span class="approve-kicker">${ICON.lock}<span>TCDS · RECOVERY EMAIL APPROVAL</span></span>
++   <h2>Approve recovery email</h2><p id="lead">Loading the request…</p></div>
++  <div class="approve-body"><div class="approve-what">
++  <div id="request" class="approve-summary" hidden>
++   <div class="approve-person"><strong id="r-name"></strong><small id="r-user"></small></div>
++   <dl class="approve-facts">
++    <div class="wide"><dt>Recovery email</dt><dd id="r-email"></dd></div>
++    <div><dt>Requested</dt><dd id="r-requested"></dd></div>
++    <div><dt>Code confirmed</dt><dd id="r-confirmed"></dd></div>
++    <div class="wide"><dt>Request expires</dt><dd id="r-expires"></dd></div>
++   </dl>
++  </div>
++  </div><div class="approve-act">
++  <ol id="steps" class="approve-steps" aria-label="Approval progress" hidden></ol>
++  <div id="status" class="auth-note" role="status" aria-live="polite" hidden></div>
++  <div id="error" class="auth-error" role="alert" hidden></div>
++  <button id="start" class="auth-submit" type="button" hidden>Continue</button>
++  <button id="approve" class="auth-submit" type="button" hidden>Approve with passkey</button>
++  <p class="auth-help" id="help" hidden></p>
++  <div id="share" class="approve-share" hidden>
++   <p><b>Another approver on another device?</b> Send them this link. Only an authorized approver's own passkey can approve it.</p>
++   <div class="approve-link"><input id="link" readonly aria-label="Approval link"><button id="copy" type="button">Copy link</button></div>
++  </div>
++  </div></div>
++  <div class="auth-footer"><span>Encrypted transport required</span><span>Access is centrally governed</span></div>
++ </div>
++</section>
++<footer class="auth-page-footer">© 2026 Total Coverage Database Solutions · Authorized personnel only</footer></main>
++<script src="/approve/assets/approve-recovery.js"></script></body></html>`;
++
++const APPROVE_RECOVERY_JS=`(()=>{'use strict';
++// States: loading -> awaiting approval (k of n) -> approved | waiting for the code | expired | cancelled. Two clicks on
++// purpose: the passkey prompt must start from a click (Safari) and the challenge it signs lives 2 minutes.
++const $=id=>document.getElementById(id);
++const dec=s=>{const b=s.replace(/-/g,'+').replace(/_/g,'/');const r=atob(b.padEnd(Math.ceil(b.length/4)*4,'='));return Uint8Array.from(r,c=>c.charCodeAt(0))};
++const enc=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
++const show=(el,text)=>{el.textContent=text;el.hidden=!text};
++const eid=new URLSearchParams(location.search).get('e')||'';
++let info=null,current=null,busy=false,retry=false;
++const who=()=>info?info.targetDisplayName:'this employee';
++const MESSAGES={
++ APPROVER_IS_THE_TARGET:()=>'That passkey belongs to '+who()+'. Employees cannot approve their own recovery email. Choose an approver\\'s passkey.',
++ APPROVER_NOT_AUTHORIZED:()=>'That passkey belongs to someone who is not an authorized recovery-email approver. Choose an approver\\'s own passkey.',
++ APPROVER_ALREADY_APPROVED:()=>'That approver has already approved this email. Another approval must come from a different approver.',
++ RECOVERY_CONTACT_NOT_AWAITING_APPROVAL:()=>'This request is no longer waiting for approval. It may be approved, cancelled or expired.',
++ RECOVERY_CONTACT_ENROLLMENT_NOT_FOUND:()=>'This approval request was not found. Check the link you received.',
++ CREDENTIAL_NOT_ACTIVE:()=>'That passkey is not active. Choose a different passkey, or contact your identity administrator.',
++ USER_HANDLE_MISMATCH:()=>'The passkey could not be matched to an account. Try again with your own approver passkey.',
++ CHALLENGE_EXPIRED:()=>'The passkey step took longer than 2 minutes. Try again.',CHALLENGE_CONSUMED:()=>'That step was already used. Try again.',
++ USER_VERIFICATION_REQUIRED:()=>'The device did not confirm it was you (fingerprint, face or PIN). Try again.',
++ COUNTER_REGRESSION:()=>'That passkey has been suspended for safety. Contact your identity administrator.',
++ RATE_LIMITED:()=>'Too many attempts from this network. Wait a minute and try again.'};
++const fail=code=>{show($('status'),'');show($('error'),(MESSAGES[code]||(()=>'The approval could not be completed. Try again, or contact your identity administrator.'))())};
++async function api(path,body){const r=await fetch('/approve/api/recovery/'+path,{method:'POST',credentials:'same-origin',cache:'no-store',
++ headers:{'content-type':'application/json'},body:JSON.stringify(body)});const j=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error('x'),{code:j.error||'FAILED'});return j}
++const when=iso=>iso?new Date(iso).toLocaleString([],{dateStyle:'medium',timeStyle:'short'}):'Not yet';
++function steps(n,required,done){
++ const ol=$('steps');ol.innerHTML='';ol.hidden=false;
++ for(let k=1;k<=required;k++){
++  const ok=done||n>=k,cur=!ok&&n+1===k,li=document.createElement('li');li.className=ok?'done':cur?'current':'';
++  const i=document.createElement('i');i.setAttribute('aria-hidden','true');i.textContent=ok?'\\u2713':String(k);
++  const d=document.createElement('div'),s=document.createElement('span'),sm=document.createElement('small');
++  s.textContent=required===1?'Approver':(k===1?'First approver':'Second approver');sm.textContent=ok?'Approved':cur?'Waiting for approval':'Next';
++  d.append(s,sm);li.append(i,d);ol.append(li);
++ }
++}
++function buttons(label){current=null;$('approve').hidden=true;$('approve').disabled=false;$('start').hidden=!label;$('start').disabled=false;if(label)$('start').textContent=label}
++function apply(i){
++ info=i;
++ show($('r-name'),i.targetDisplayName);show($('r-user'),[i.targetUsername,i.employeeNumber].filter(Boolean).join(' \\u00b7 '));
++ show($('r-email'),i.contactHint);show($('r-requested'),when(i.requestedAt));show($('r-confirmed'),when(i.codeVerifiedAt));
++ show($('r-expires'),when(i.expiresAt));$('request').hidden=false;
++ steps(i.approvals,i.required,i.status==='APPROVED');
++ $('share').hidden=!(i.status==='AWAITING_APPROVAL'&&i.approvals>=1);
++ if(i.status==='APPROVED'){buttons(null);$('help').hidden=true;show($('error'),'');show($('lead'),'Recovery email approved.');
++  show($('status'),i.targetDisplayName+' can now use '+i.contactHint+' to reset a forgotten password. You can close this page.');return}
++ if(i.status==='AWAITING_CODE'){buttons(null);show($('lead'),'Not ready for approval yet.');show($('status'),'');
++  show($('error'),'The employee has not confirmed the code sent to this email yet. Open this link again once they have.');return}
++ if(i.status!=='AWAITING_APPROVAL'){buttons(null);$('help').hidden=true;show($('status'),'');
++  show($('lead'),i.status==='EXPIRED'?'This request has expired.':'This request was cancelled.');
++  show($('error'),'No approval can be given on it. The employee can add their recovery email again in the Warehouse app.');return}
++ show($('lead'),i.approvals>=1?'One approval is recorded. A different approver must now approve.':'Check the person and the email, then approve with your own passkey.');
++ show($('help'),'Choose your own approver passkey and confirm with your fingerprint, face or device PIN. Your signature is recorded with this approval.');
++ if(!busy&&!current)buttons(retry?'Try again with a different passkey':'Continue');
++}
++async function refresh(){try{apply(await api('info',{enrollmentId:eid}))}catch{}}
++async function load(){
++ $('link').value=location.origin+'/approve/recovery/?e='+encodeURIComponent(eid);
++ if(!/^[0-9a-f-]{36}$/i.test(eid)){show($('lead'),'Open the full approval link to continue.');fail('RECOVERY_CONTACT_ENROLLMENT_NOT_FOUND');return}
++ if(!window.PublicKeyCredential||!navigator.credentials||!navigator.credentials.get){show($('lead'),'This browser cannot use passkeys.');show($('error'),'Open this link in a current version of Safari, Chrome or Edge.');return}
++ try{apply(await api('info',{enrollmentId:eid}))}catch(e){show($('lead'),'The request could not be loaded.');fail(e.code)}
++}
++$('start').onclick=async()=>{
++ $('start').disabled=true;show($('error'),'');show($('status'),'Preparing the approval\\u2026');
++ try{current=await api('options',{enrollmentId:eid});$('start').hidden=true;$('approve').hidden=false;$('approve').focus();show($('status'),'')}
++ catch(e){fail(e.code);$('start').disabled=false;if(/NOT_AWAITING_APPROVAL$/.test(e.code||''))refresh()}
+ };
++$('approve').onclick=async()=>{
++ if(!current||busy)return;busy=true;$('approve').disabled=true;show($('error'),'');
++ show($('status'),'Choose your own approver passkey, then confirm with fingerprint, face or device PIN.');
++ const o=current.options,challengeId=current.challengeId;
++ try{
++  const cred=await navigator.credentials.get({publicKey:{...o,challenge:dec(o.challenge),allowCredentials:[]}});
++  const r=cred.response;
++  const response={id:cred.id,rawId:enc(cred.rawId),type:cred.type,authenticatorAttachment:cred.authenticatorAttachment||undefined,
++   clientExtensionResults:cred.getClientExtensionResults?cred.getClientExtensionResults():{},
++   response:{clientDataJSON:enc(r.clientDataJSON),authenticatorData:enc(r.authenticatorData),signature:enc(r.signature),userHandle:r.userHandle?enc(r.userHandle):null}};
++  show($('status'),'Recording the approval\\u2026');
++  const v=await api('verify',{challengeId,enrollmentId:eid,response});
++  busy=false;current=null;retry=false;
++  let i;try{i=await api('info',{enrollmentId:eid})}catch{i={...info,approvals:v.approvals,status:v.approved?'APPROVED':'AWAITING_APPROVAL'}}
++  apply(i);
++  if(i.status==='AWAITING_APPROVAL')show($('status'),'Approval '+i.approvals+' of '+i.required+' recorded. Thank you.');
++ }catch(e){
++  busy=false;
++  if(e&&e.name==='NotAllowedError'){show($('status'),'');show($('error'),'The passkey prompt was cancelled or timed out. Select Continue to try again.');buttons('Continue');return}
++  retry=true;fail(e&&e.code);buttons('Try again with a different passkey');
++  if(/NOT_AWAITING_APPROVAL$|ALREADY_APPROVED$/.test((e&&e.code)||''))refresh();
++ }
++};
++$('copy').onclick=async()=>{const b=$('copy');try{await navigator.clipboard.writeText($('link').value)}catch{$('link').select();try{document.execCommand('copy')}catch{}}
++ b.textContent='Copied';setTimeout(()=>{b.textContent='Copy link'},2000)};
+ $('link').onfocus=()=>$('link').select();
+ load();
+ })();`;
+@@ -435,10 +580,13 @@
+     if(req.method==='GET'&&url==='/enroll/assets/enroll.js')return send(200,'text/javascript; charset=utf-8',JS);
+     if(req.method==='GET'&&(url==='/approve/'||url==='/approve'))return send(200,'text/html; charset=utf-8',APPROVE_PAGE);
+     if(req.method==='GET'&&url==='/approve/assets/approve.js')return send(200,'text/javascript; charset=utf-8',APPROVE_JS);
++    if(req.method==='GET'&&(url==='/approve/recovery/'||url==='/approve/recovery'))return send(200,'text/html; charset=utf-8',APPROVE_RECOVERY_PAGE);
++    if(req.method==='GET'&&url==='/approve/assets/approve-recovery.js')return send(200,'text/javascript; charset=utf-8',APPROVE_RECOVERY_JS);
+     const img=url.startsWith('/enroll/assets/')?url.slice('/enroll/assets/'.length):'';
+     if(req.method==='GET'&&ASSETS[img]&&images.has(img))return send(200,ASSETS[img],images.get(img) as Buffer,{'cache-control':'public, max-age=86400'});
+     const API=new Set(['/enroll/api/options','/enroll/api/verify','/approve/api/info','/approve/api/options','/approve/api/verify',
+-      '/approve/api/grant/info','/approve/api/grant/options','/approve/api/grant/verify']);
++      '/approve/api/grant/info','/approve/api/grant/options','/approve/api/grant/verify',
++      '/approve/api/recovery/info','/approve/api/recovery/options','/approve/api/recovery/verify']);
+     if(req.method!=='POST'||!API.has(url))return json(404,{error:'NOT_FOUND'});
+     const site=req.headers['sec-fetch-site'];
+     if(req.headers.origin!==origin.origin||(site!==undefined&&site!=='same-origin')||!/^application\/json(;|$)/i.test(String(req.headers['content-type']??'')))
+@@ -452,6 +600,20 @@
+       let b:any;try{b=JSON.parse(raw)}catch{return json(400,{error:'REQUEST_INVALID'})}
+       const ids={requestId:crypto.randomUUID(),correlationId:crypto.randomUUID()};
+       try{
++        if(url.startsWith('/approve/api/recovery/')){
++          const UUIDV=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
++          if(typeof b?.enrollmentId!=='string'||!UUIDV.test(b.enrollmentId))return json(400,{error:'REQUEST_INVALID'});
++          if(url==='/approve/api/recovery/info')return json(200,await verifier.recoveryInfo(b.enrollmentId,ids));
++          if(url==='/approve/api/recovery/options'){
++            const o=await verifier.recoveryOptions(b.enrollmentId,ids);
++            if(o?.options?.rpId!==c.verifier.rpId||o?.options?.userVerification!=='required')return json(502,{error:'APPROVAL_UNAVAILABLE'});
++            return json(200,{challengeId:o.challengeId,options:o.options});
++          }
++          if(typeof b.challengeId!=='string'||!UUIDV.test(b.challengeId)||!b.response||typeof b.response!=='object')return json(400,{error:'REQUEST_INVALID'});
++          const v=await verifier.recoveryVerify({challengeId:b.challengeId,enrollmentId:b.enrollmentId,response:b.response},ids);
++          console.log(JSON.stringify({level:'info',msg:'recovery email approval recorded',approved:v.approved,approvals:v.approvals,required:v.required,requestId:ids.requestId}));
++          return json(200,{approved:v.approved,approvals:v.approvals,required:v.required});
++        }
+         if(url.startsWith('/approve/api/grant/')){
+           const UUIDV=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+           if(typeof b?.grantRequestId!=='string'||!UUIDV.test(b.grantRequestId))return json(400,{error:'REQUEST_INVALID'});
+--- a/src/express/centralVerifierClient.ts	2026-11-23 08:35:09
++++ b/src/express/centralVerifierClient.ts	2026-11-23 08:35:09
+@@ -67,6 +67,15 @@
+         throw new CentralCallError('CENTRAL_RESULT_BINDING_MISMATCH',502);
+       return r;
+     },
++    // 645 recovery-email approval
++    recoveryInfo:(enrollmentId:string,ids:Ids)=>call('/recovery-contact-approval/info',{enrollmentId},ids),
++    recoveryOptions:(enrollmentId:string,ids:Ids)=>call('/recovery-contact-approval/options',{enrollmentId},ids),
++    recoveryVerify:async(b:{challengeId:string;enrollmentId:string;response:unknown},ids:Ids)=>{
++      const r=accept(await call('/recovery-contact-approval/verify',b,ids),{ceremony:'RECOVERY_CONTACT_APPROVAL',challengeId:b.challengeId,requestId:ids.requestId});
++      if(r.enrollmentId!==b.enrollmentId||typeof r.approved!=='boolean'||!Number.isInteger(r.approvals)||!Number.isInteger(r.required))
++        throw new CentralCallError('CENTRAL_RESULT_BINDING_MISMATCH',502);
++      return r;
++    },
+     enrollmentOptions:(inviteToken:string,ids:{requestId:string;correlationId:string})=>call('/enrollment/options',{inviteToken},ids),
+     enrollmentVerify:async(b:{challengeId:string;response:unknown;friendlyName?:string},ids:{requestId:string;correlationId:string})=>
+       accept(await call('/enrollment/verify',b,ids),{ceremony:'CENTRAL_PASSKEY_ENROLLMENT',challengeId:b.challengeId,requestId:ids.requestId}),

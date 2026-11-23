@@ -9,6 +9,7 @@ import {RecoveryStore} from './recoveryStore';
 import {recoveryRouter} from './recoveryRoutes';
 import {RecoveryWorkers} from './recoveryWorkers';
 import {transportFor} from './recoveryDelivery';
+import {recoveryEnrollmentRouter} from './recoveryEnrollmentRoutes';
 
 export interface RecoveryInstallDeps{pool:Pool;env:IdentityEnv;limits:RateLimitService;resets:PasswordResetService;common:RequestHandler[]}
 
@@ -24,9 +25,13 @@ export function installRecovery(app:Express,d:RecoveryInstallDeps){
   const redis=new Redis(d.env.REDIS_URL,{maxRetriesPerRequest:2,enableOfflineQueue:true});
   redis.on('error',e=>console.error(JSON.stringify({level:'error',msg:'recovery redis error',error:e.message})));
   const store=new RecoveryStore(redis as any,keys.cookie,keys.token);
+  const transport=transportFor(cfg);
   app.use('/api/v1/auth/password-recovery',...d.common,recoveryRouter({pool:d.pool,env:d.env,limits:d.limits,resets:d.resets,cfg,keys,store}));
-  const workers=cfg.RECOVERY_WORKERS_ENABLED?new RecoveryWorkers(d.pool,keys,transportFor(cfg),cfg.RECOVERY_LINK_BASE,cfg.RECOVERY_TICK_MS):null;
+  // 645: signed-in employees add and confirm their recovery email (approval happens on the login-stg page, not here).
+  app.use('/api/v1/auth/recovery-email',...d.common,recoveryEnrollmentRouter({pool:d.pool,env:d.env,limits:d.limits,cfg,keys,transport}));
+  const workers=cfg.RECOVERY_WORKERS_ENABLED?new RecoveryWorkers(d.pool,keys,transport,cfg.RECOVERY_LINK_BASE,cfg.RECOVERY_TICK_MS):null;
   workers?.start();
-  console.log(JSON.stringify({level:'info',msg:'password recovery mounted',workers:!!workers,delivery:cfg.RECOVERY_DELIVERY_MODE}));
+  console.log(JSON.stringify({level:'info',msg:'password recovery mounted',workers:!!workers,delivery:cfg.RECOVERY_DELIVERY_MODE,
+    recoveryEmailApprovers:(cfg.RECOVERY_APPROVER_EMAILS??'').split(',').filter(Boolean).length}));
   return {close:async()=>{await workers?.stop();await redis.quit().catch(()=>{});}};
 }
