@@ -18,6 +18,7 @@ import { ProtectedRoute } from '../features/auth/routes/ProtectedRoute';
 import { DeviceSetupPage } from '../features/auth/pages/DeviceSetupPage';
 import { RestrictedSession } from '../screens/RestrictedSession';
 import {EmployeeRecoveryPage,NewPasswordRecoveryPage,ManagerRecoveryPage,AdminRecoveryPage} from '../features/auth/recovery/RecoveryUI';
+import {RecoveryEmailScreen} from '../features/auth/recovery/RecoveryEmailScreen';
 
 // The diagnostic surface is the only consumer of the Scandit runtime. Loading it
 // on demand keeps the scanner SDK out of the initial application bundle.
@@ -56,6 +57,8 @@ export const router = createBrowserRouter([
     { path: 'pack-ship', element: protect(<PackShipScreen capturePolicyAuthority={packShipCapturePolicyAuthority} />) },
     { path: 'returns', element: protect(<ReturnsScreen />) },
     { path: 'settings', element: protect(<SupervisorConsoleScreen />) },
+    // TCDS 645: the signed-in employee's recovery email (add, confirm the code, then administrator approval).
+    { path: 'account/recovery-email', element: protect(<RecoveryEmailScreen />) },
     // 6.2B scanner diagnostic: behind the existing sign-in guard and not linked from any navigation.
     { path: '__diagnostics/scanner-capture', element: protect(lazyScreen(<ScannerCaptureDiagnosticPage />)) },
     { path: '*', element: <Navigate to="/dashboard" replace /> }

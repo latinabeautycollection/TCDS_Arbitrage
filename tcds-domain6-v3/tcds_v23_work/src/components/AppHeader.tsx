@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bell, HelpCircle, LogOut, Menu, UserRound, X } from 'lucide-react';
+import { Bell, HelpCircle, LogOut, MailCheck, Menu, UserRound, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BrandMark } from './BrandMark';
 import { useAuth } from '../features/auth/context/AuthContext';
+
+// TCDS 645: the Recovery email entry appears only in builds where the Login V2 API serves /api/v1/auth/recovery-email.
+const RECOVERY_EMAIL_ENABLED = import.meta.env.VITE_RECOVERY_EMAIL_ENABLED === 'true';
 
 // TCDS Login V2: the menu button opens the account menu (signed-in user + Sign out).
 function AccountMenu() {
@@ -43,6 +46,9 @@ function AccountMenu() {
             </div>
           </div>
           <div className="my-1 h-px bg-tcds-line" />
+          {RECOVERY_EMAIL_ENABLED && <button role="menuitem" onClick={() => { setOpen(false); navigate('/account/recovery-email'); }} className="tcds-focus flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-black text-tcds-ink hover:bg-tcds-surface">
+            <MailCheck size={18} className="text-tcds-gold" /> Recovery email
+          </button>}
           <button role="menuitem" onClick={() => void signOut()} disabled={signingOut} className="tcds-focus flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-black text-red-700 hover:bg-red-50 disabled:opacity-50">
             <LogOut size={18} /> {signingOut ? 'Signing out…' : 'Sign out'}
           </button>
