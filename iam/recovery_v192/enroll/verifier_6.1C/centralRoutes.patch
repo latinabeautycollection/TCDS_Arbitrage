@@ -1,0 +1,23 @@
+--- a/src/central/centralRoutes.ts	2026-11-23 08:33:54
++++ b/src/central/centralRoutes.ts	2026-11-23 08:33:54
+@@ -4,6 +4,7 @@
+ import {CentralError,CentralService,type Db} from './centralService';
+ import type {CentralConfig} from './centralConfig';
+ import {CentralGrantService,type GrantConfig} from './centralGrants';
++import {CentralRecoveryContactService} from './centralRecoveryContacts';
+ 
+ const U=z.string().uuid();
+ const Issuer=z.string().regex(/^https:\/\/[a-z0-9.-]+(:[0-9]{1,5})?\/?$/);
+@@ -64,6 +65,12 @@
+   r.post('/approval/options',run(q=>s.approvalOptions(z.object({bindingRequestId:U}).parse(q.body).bindingRequestId,ids(q))));
+   r.post('/approval/verify',run(q=>{const b=z.object({challengeId:U,bindingRequestId:U,response:Assertion}).parse(q.body);
+     return s.approvalVerify(b,ids(q))}));
++  // 645 recovery-email approval (the enrollment id is not secret: approving needs a passkey with the approver role)
++  const rc=new CentralRecoveryContactService(db,cfg);
++  r.post('/recovery-contact-approval/info',run(q=>rc.info(z.object({enrollmentId:U}).parse(q.body).enrollmentId)));
++  r.post('/recovery-contact-approval/options',run(q=>rc.options(z.object({enrollmentId:U}).parse(q.body).enrollmentId,ids(q))));
++  r.post('/recovery-contact-approval/verify',run(q=>{const b=z.object({challengeId:U,enrollmentId:U,response:Assertion}).parse(q.body);
++    return rc.verify(b,ids(q))}));
+   // 630 module-grant approval (one ceremony per approver for the whole set); only when the grant admission is configured
+   if(grants){
+     const g=new CentralGrantService(db,cfg,grants);
