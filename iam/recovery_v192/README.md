@@ -35,15 +35,28 @@ the vendor roles and fixes:
 ## Staging
 `stg_v192_install.sh status|install|verify|uninstall`. After install, the 635 guard requires an OTP proof for every reset.
 
-## Still open
-- **Adapter in login-v2-api:**
-  - bind the vendor router to 6.1B claim/consume and the v192 functions;
-  - encrypted reset-token store;
-  - approve through `approve_password_reset_v3`;
-  - EXECUTE on `authorize_password_recovery_override_v62` for the manager override.
-- **PWA:**
-  - `rowVersion` vs `expectedRowVersion`;
-  - code and new password in one step;
-  - hide the unsupported decisions.
-- **Recovery-contact enrollment:** policy decision with Anthony.
-- **Real passkey step-up test:** needs a staging sign-in.
+## Status (2026-11-23)
+- **Done:**
+  - Login API adapter `adapter/`: live on staging, e2e 28/28 including a real Graph email.
+  - PWA recovery screens: committed.
+  - Enrollment policy: decided (645 below).
+- **Still open:**
+  - Manager 24-hour override: needs EXECUTE on `authorize_password_recovery_override_v62`.
+  - Production rollout: 604–622, item 3/4 6.1B patches, 644, adapter, 645, PWA deploy, and a central passkey host for
+    production.
+
+## 645: recovery-email enrollment (ours)
+Decided 2026-11-22 (Anthony): employees add their own recovery email while signed in and confirm it with an emailed
+code. An approver then approves it with a central passkey on the login-stg approval page before it can be used.
+- **Approvers:** Anthony is the only approver for now, so `recovery_contact_policy_v645.required_approvals = 1`. Moving
+  to two approvers is one `UPDATE`.
+- **Vendor table:** `recovery_destination_reviews_v11` and its two-approver CHECK are untouched and unused.
+- **Files:** `sql/645_recovery_contact_enrollment.sql` and `sql/645_rollback.sql` (full rollback), `flow645.sql` (functional
+  test, run inside a rolled-back transaction), `v192_645_rehearse.sh` (staging rehearsal) and `stg_645.sh`
+  (status|install|verify|uninstall|commit).
+- **Rehearsal:** 27/27 functional checks; the full rollback left the catalog identical, twice.
+- **Still to build:**
+  - 6.1C verifier routes;
+  - a recovery-email mode on the login-stg approval page;
+  - login API enrollment routes with an approver email;
+  - a "Recovery email" screen in the PWA.
