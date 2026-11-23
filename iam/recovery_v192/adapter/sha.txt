@@ -1,5 +1,5 @@
 6bbb19db76ce568221a324baf104bfc016f23b19078c76e691c0948e9aec839f  ./harness/softPasskey.cjs
-83c37eb0d757fb438de57781f95d13d921f3b348adcb8772fed548125125aacd  ./harness/stg_enroll_e2e.cjs
+335ca9afb918eab30e256189b8d1cb9d24a2ba60d7593feeed101af23d1dbe1d  ./harness/stg_enroll_e2e.cjs
 c7283082564d6f7857f13c3dd87b3be9b33bf2d5158f3dee8672ee8b4f4b0249  ./harness/stg_recovery_e2e.cjs
 43e8a037dddf9902c9f4f42dbb2886d3fbe82bb5f5bcd5f7ca05ea8f6657af35  ./integration.patch
 4ab2f78429442352c88ce72699cb70e972cca100d491cacb8d760bc7fc5ff584  ./src/express/recovery/recoveryConfig.ts
@@ -12,6 +12,7 @@ cc99c2f12b23ec7443327ad028e7115953d88cd069b0a354c85ea56bd9b2d790  ./src/express/
 eeae0da7be8855d3c5c85970e2b6b232d368b484321e0bb2260ea356d2faed4d  ./src/express/recovery/recoveryWorkers.ts
 e4cfc9e078ae13cc72827a4c537995c4074d5a1601776794c8f3a90bbca85f06  ./stg_adapter.sh
 b354f615d450fed7d223c7023d616415bb7326ecf0b66ac65a372c948205f060  ./stg_adapter_v2.sh
+872ecd1b87e3ae18afd9208be9e018ee54131a91d00b8f7d1cd3b86dde3b3f09  ./stg_anthony.sh
 97335e72bdf5c2409d83fd6b3060fcc3ad5c68ce107b40516abaa0ac048bf89f  ./tests/recovery/recoveryEnrollment.test.ts
 c1779fb5bee3ee9cb8cd60c4d0b62c80b5a53c7d63c97cf9404ccda273c361bc  ./tests/recovery/recoveryRoutes.test.ts
 d0e6b007842195e2b812353a287b1ac6884ff3d270e62dca1a10f1ead6c04bf1  ./tests/recovery/recoveryWorkers.test.ts

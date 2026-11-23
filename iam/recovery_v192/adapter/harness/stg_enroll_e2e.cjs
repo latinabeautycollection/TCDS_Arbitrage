@@ -19,6 +19,7 @@ const H = (v, k) => crypto.createHmac('sha256', k).update(v).digest();
 const h32 = s => crypto.createHash('sha256').update(s).digest();
 const db = new Pool({ ssl: { rejectUnauthorized: false }, max: 2 });
 let pass = 0, fail = 0; const ok = (c, m, d = '') => { c ? pass++ : fail++; console.log(`${c ? 'PASS' : 'FAIL'} ${m}${d ? ' | ' + d : ''}`); };
+const HUMAN = process.env.HUMAN_APPROVAL === '1';   // stop at "waiting for approval": a real approver uses the page
 const q1 = async (sql, p) => (await db.query(sql, p)).rows[0];
 const ask = q => new Promise(res => { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); rl.question(q, a => { rl.close(); res(a.trim()); }); });
 
@@ -29,7 +30,11 @@ async function call(base, method, p, body, h = {}) {
   return { s: r.status, j, code: j.error ? (j.error.code || j.error) : '' };
 }
 async function codeFor(kind, t0) {
-  if (API.RECOVERY_DELIVERY_MODE !== 'capture') return ask(`   type the 8-digit code from the "${kind === 'CONTACT_CODE' ? 'Confirm your TCDS Warehouse recovery email' : 'recovery'}" email sent to ${TO}: `);
+  if (API.RECOVERY_DELIVERY_MODE !== 'capture') {
+    const at = new Date(t0).toISOString().slice(11, 16);
+    console.log(`   Gmail puts emails with the same subject in one thread: open the thread and use the LAST (newest) message, sent after ${at} UTC.`);
+    return ask(`   type the 8-digit code from the "${kind === 'CONTACT_CODE' ? 'Confirm your TCDS Warehouse recovery email' : 'recovery'}" email sent to ${TO}: `);
+  }
   for (let i = 0; i < 40; i++) {
     await new Promise(r => setTimeout(r, 1000));
     const lines = fs.existsSync(API.RECOVERY_CAPTURE_FILE) ? fs.readFileSync(API.RECOVERY_CAPTURE_FILE, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
@@ -67,10 +72,11 @@ async function codeFor(kind, t0) {
         statement_timestamp()+interval '7 hours',gen_random_uuid(),gen_random_uuid() FROM ds RETURNING auth_session_id`,
       [fx.dev, emp.user_id, emp.employee_id, H(token, API.SESSION_HASH_KEY), H(csrf, API.CSRF_HASH_KEY)])).auth_session_id;
     // ---- fixtures: test approver (global role) + software central passkey through the 626 functions
+    if (!HUMAN) {
     fx.approver = (await q1(`INSERT INTO warehouse_identity.users(username,display_name,status) VALUES('e2e.recovery.approver.'||substr(md5(random()::text),1,6),'E2E Recovery Approver','ACTIVE') RETURNING user_id`)).user_id;
     await db.query(`INSERT INTO warehouse_identity.user_role_assignments(user_id,role_id) SELECT $1,role_id FROM warehouse_identity.roles
       WHERE role_code='IAM_RECOVERY_DESTINATION_APPROVER'`, [fx.approver]);
-    const pk = soft.create(), k = crypto.randomUUID();
+    const pk = soft.create(), k = crypto.randomUUID(); fx.pk = pk;
     await db.query(`SELECT warehouse_identity.central_issue_invite_v1($1,$2,$3,$4,60,'enroll e2e test approver',gen_random_uuid())`, [fx.approver, admin.user_id, h32('tok' + k), RP]);
     const b = await q1(`SELECT * FROM warehouse_identity.central_enrollment_begin_v1($1,$2,$3,$4,gen_random_uuid(),gen_random_uuid())`, [h32('tok' + k), RP, ORIGIN, h32('ch' + k)]);
     const c = await q1(`SELECT * FROM warehouse_identity.central_claim_challenge_v1($1,$2,$3,'CENTRAL_PASSKEY_ENROLLMENT',$4,NULL,NULL,NULL)`, [b.auth_challenge_id, h32('ch' + k), h32('cl' + k), RP]);
@@ -80,8 +86,11 @@ async function codeFor(kind, t0) {
     if (f.outcome !== 'SUCCEEDED') throw new Error('central passkey fixture failed: ' + f.outcome);
     fx.passkey = f.central_passkey_id;
     const mat = await q1(`SELECT * FROM warehouse_identity.central_passkey_material_v1($1,$2)`, [pk.credentialId, RP]);
-    const userHandle = Buffer.from(mat.user_handle).toString('base64url');
+    fx.userHandle = Buffer.from(mat.user_handle).toString('base64url');
     console.log('   fixtures: employee session, test approver with role + software central passkey');
+    }
+    let pk, userHandle;
+    if (!HUMAN) { pk = fx.pk; userHandle = fx.userHandle; }
 
     // ---- employee: add, code, confirm
     const E = `http://127.0.0.1:${API.PORT}/api/v1/auth/recovery-email`;
@@ -99,9 +108,14 @@ async function codeFor(kind, t0) {
     r = await call(E, 'POST', '/verify', { code: code === '00000000' ? '11111111' : '00000000' }, emph);
     ok(r.s === 403 && r.code === 'RECOVERY_CODE_INVALID', 'wrong code refused', `${r.s} ${r.code}`);
     r = await call(E, 'POST', '/verify', { code }, emph);
+    if (r.s === 403 && r.code === 'RECOVERY_CODE_INVALID' && API.RECOVERY_DELIVERY_MODE !== 'capture') {
+      console.log('   that code was refused - most likely it came from an older email in the thread. One more try:');
+      r = await call(E, 'POST', '/verify', { code: await ask('   code from the NEWEST email: ') }, emph);
+    }
     ok(r.s === 200 && r.j.pending?.status === 'AWAITING_APPROVAL', 'right code -> waiting for approval', `${r.s} ${r.code}`);
     const eid = (await q1(`SELECT enrollment_id FROM warehouse_identity.recovery_contact_enrollments_v645 WHERE user_id=$1 AND status='AWAITING_APPROVAL'`, [emp.user_id]))?.enrollment_id;
     ok(!!eid, 'enrollment recorded as awaiting approval');
+    if (!eid) throw new Error('the code was not accepted, so there is nothing to approve - run e2e-enroll again');
     const usable = await q1(`SELECT count(*)::int n FROM warehouse_identity.user_recovery_contacts c JOIN warehouse_identity.recovery_contact_enrollments_v645 e USING(contact_id)
       WHERE e.enrollment_id=$1 AND c.status='VERIFIED'`, [eid]);
     ok(usable.n === 0, 'not usable for recovery before approval');
@@ -111,6 +125,13 @@ async function codeFor(kind, t0) {
       ok(!!n && n.link.endsWith('?e=' + eid) && !/\d{8}/.test(JSON.stringify({ ...n, at: '' })), 'approver notice carries the approval link and no code', n ? n.link : 'none');
     } else console.log(`   (graph mode: the approver notice went to ${API.RECOVERY_APPROVER_EMAILS}; its link ends ?e=${eid})`);
 
+    if (HUMAN) {
+      const link = `${ORIGIN}/approve/recovery/?e=${eid}`;
+      console.log(`\n   READY FOR A REAL APPROVER. The notice went to ${API.RECOVERY_APPROVER_EMAILS || '(no approver email configured)'}.`);
+      console.log(`   Approval link: ${link}`);
+      console.log('   After the approval, check with: stg_anthony.sh status   (then e2e-reset to use the email)');
+      return;
+    }
     // ---- approver: login-stg page API -> verifier -> 645
     const ph = { origin: ORIGIN, 'sec-fetch-site': 'same-origin' };
     r = await call(PAGE, 'POST', '/approve/api/recovery/info', { enrollmentId: eid }, ph);
@@ -150,7 +171,7 @@ async function codeFor(kind, t0) {
     // earlier runs (before this fix) left a role assignment on disabled test approvers: revoke those too
     if (fx.admin) await db.query(`UPDATE warehouse_identity.user_role_assignments a SET revoked_at=clock_timestamp(),revoked_by=$1 FROM warehouse_identity.users u
       WHERE u.user_id=a.user_id AND u.username LIKE 'e2e.recovery.approver.%' AND a.revoked_at IS NULL`, [fx.admin]).catch(e => console.log('cleanup old roles: ' + e.message));
-    console.log(`\nENROLL E2E RESULT: ${pass} passed, ${fail} failed${fx.session ? ' (fixtures revoked; the approved recovery email stays on stg_employee_1)' : ''}`);
+    console.log(`\nENROLL E2E RESULT: ${pass} passed, ${fail} failed${fx.session ? (fail ? ' (fixtures revoked)' : HUMAN ? ' (fixtures revoked; the email now waits for a real approver)' : ' (fixtures revoked; the approved recovery email stays on stg_employee_1)') : ''}`);
     await db.end(); process.exit(fail ? 1 : 0);
   }
 })();
